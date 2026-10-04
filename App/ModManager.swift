@@ -32,10 +32,15 @@ enum ModManager {
     static func availableMods() -> [String] {
         let fm = FileManager.default
         let urls = (try? fm.contentsOfDirectory(at: modsDirectory,
-                                                includingPropertiesForKeys: nil)) ?? []
-        return urls.filter { $0.pathExtension.lowercased() == "lua" }
-                   .map { $0.deletingPathExtension().lastPathComponent }
-                   .sorted()
+                                                includingPropertiesForKeys: [.isRegularFileKey])) ?? []
+        return urls.filter {
+            // Regular files only: rejects symlinks (which could point
+            // anywhere in the container) and directories named "*.lua".
+            $0.pathExtension.lowercased() == "lua" &&
+            (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+        }
+        .map { $0.deletingPathExtension().lastPathComponent }
+        .sorted()
     }
 
     static func isEnabled(_ name: String) -> Bool {

@@ -139,7 +139,7 @@ struct SettingsView: View {
                 refreshMods()
             }
             .font(.system(size: 20, weight: .bold))
-            ForEach(state.modErrors, id: \.self) { err in
+            ForEach(Array(state.modErrors.enumerated()), id: \.offset) { _, err in
                 Text(err)
                     .font(.system(size: 15, design: .monospaced))
                     .foregroundColor(.red)

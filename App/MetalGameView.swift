@@ -128,7 +128,7 @@ final class MetalGameView: UIView {    var state: GameState
         let dt = min(max(rawDt, 1.0 / 240.0), 1.0 / 20.0)
         fpsEMA += (1.0 / rawDt - fpsEMA) * 0.05
 
-        let world = state.world
+        guard let world = state.world else { return }
         if !state.isPaused {
             RS_Step(world, Float(dt))
         }
@@ -252,7 +252,7 @@ final class MetalGameView: UIView {    var state: GameState
 
     private func beginToolTouch(_ t: UITouch) {
         let p = worldPoint(t)
-        let world = state.world
+        guard let world = state.world else { return }
 
         // Spawn placement takes precedence over the selected tool.
         if let kind = state.pendingSpawn {
@@ -269,7 +269,7 @@ final class MetalGameView: UIView {    var state: GameState
             RS_Ignite(world, p.x, p.y, 60)
         case .delete:
             let e = RS_EntityAtPoint(world, p.x, p.y)
-            if e != 0 { RS_Despawn(world, e) }
+            if e != 0 { state.despawn(e) }
         case .freeze:
             let e = RS_EntityAtPoint(world, p.x, p.y)
             if e != 0 { state.toggleFreeze(e) }
@@ -295,7 +295,7 @@ final class MetalGameView: UIView {    var state: GameState
 
     private func moveToolTouch(_ t: UITouch) {
         let p = worldPoint(t)
-        let world = state.world
+        guard let world = state.world else { return }
         switch state.selectedTool {
         case .grab:
             if grabHandle != 0 { RS_GrabMove(world, grabHandle, p.x, p.y) }
@@ -318,7 +318,7 @@ final class MetalGameView: UIView {    var state: GameState
     }
 
     private func endToolTouch(_ t: UITouch, cancelled: Bool) {
-        let world = state.world
+        guard let world = state.world else { return }
         if grabHandle != 0 {
             RS_GrabEnd(world, grabHandle)
             grabHandle = 0
@@ -356,7 +356,7 @@ final class MetalGameView: UIView {    var state: GameState
     /// Release-to-fire for aimed tools. Documented UX: touch down sets the
     /// muzzle, drag aims (orange line), release fires.
     private func fireAimed(from muzzle: SIMD2<Float>, angle: Float) {
-        let world = state.world
+        guard let world = state.world else { return }
         let tool = state.selectedTool
         if let idx = tool.hitscanIndex, tool != .smg {
             RS_FireHitscan(world, muzzle.x, muzzle.y, angle, Int32(idx))

@@ -145,7 +145,10 @@ struct Camera {
 /// Owns the RSWorld and all UI-facing state. Everything RS_* runs on the
 /// main thread (display link + UI actions), so no locking is needed.
 final class GameState: ObservableObject {
-    let world: UnsafeMutablePointer<RSWorld>
+    /// Nil only if world allocation failed at launch (OOM). All RS_*
+    /// call sites guard on this; the UI shows an error banner instead
+    /// of crashing.
+    var world: UnsafeMutablePointer<RSWorld>?
 
     @Published var selectedTool: Tool = .grab
     @Published var pendingSpawn: SpawnKind? = nil
@@ -176,14 +179,14 @@ final class GameState: ObservableObject {
     private let defaults = UserDefaults.standard
 
     init() {
-        guard let w = RS_CreateWorld() else {
-            fatalError("RS_CreateWorld failed")
-        }
-        self.world = w
+        // Nil on allocation failure; every RS_* site guards on it.
+        self.world = RS_CreateWorld()
         // Restore persisted settings.
         if defaults.object(forKey: "rs.renderScale") != nil {
             renderScale = defaults.double(forKey: "rs.renderScale")
-            particleBudget = defaults.double(forKey: "rs.particleBudget")
+            // Clamp every restored double: corrupt UserDefaults must not
+            // crash the app (Int32() traps on NaN/out-of-range).
+            particleBudget = min(max(defaults.double(forKey: "rs.particleBudget"), 500), 8000)
             physicsSubsteps = defaults.integer(forKey: "rs.physicsSubsteps")
             bloodEnabled = defaults.bool(forKey: "rs.bloodEnabled")
             showFPS = defaults.bool(forKey: "rs.showFPS")
@@ -195,7 +198,7 @@ final class GameState: ObservableObject {
     }
 
     deinit {
-        RS_DestroyWorld(world)
+        if let world { RS_DestroyWorld(world) }
     }
 
     private func save() {
@@ -207,10 +210,15 @@ final class GameState: ObservableObject {
     }
 
     private func applyParticleBudget() {
-        RS_SetParticleBudget(world, Int32(particleBudget))
+        guard let world else { return }
+        // Clamp: UserDefaults can hold arbitrary doubles (backup editors);
+        // Int32() traps on NaN or out-of-range values.
+        let clamped = min(max(particleBudget, 500), 8000)
+        RS_SetParticleBudget(world, Int32(clamped))
     }
 
     private func applySubsteps() {
+        guard let world else { return }
         RS_SetPhysicsSubsteps(world, Int32(physicsSubsteps))
     }
 
@@ -224,6 +232,7 @@ final class GameState: ObservableObject {
     }
 
     func reloadMods() {
+        guard let world else { return }
         modErrors = ModManager.loadEnabledMods(world: world)
         modsVersion += 1
     }
@@ -240,11 +249,13 @@ final class GameState: ObservableObject {
     // MARK: - UI actions (all real RS_* calls)
 
     func clearWorld() {
+        guard let world else { return }
         RS_ClearWorld(world)
         frozenEntities.removeAll()
     }
 
     func spawn(_ kind: SpawnKind, at p: SIMD2<Float>) {
+        guard let world else { return }
         switch kind {
         case .human:  RS_SpawnHuman(world, p.x, p.y)
         case .crate:  RS_SpawnCrate(world, p.x, p.y, 60)
@@ -255,6 +266,7 @@ final class GameState: ObservableObject {
     }
 
     func toggleFreeze(_ e: UInt32) {
+        guard let world else { return }
         if frozenEntities.contains(e) {
             frozenEntities.remove(e)
             RS_SetFrozen(world, e, 0)
@@ -262,5 +274,13 @@ final class GameState: ObservableObject {
             frozenEntities.insert(e)
             RS_SetFrozen(world, e, 1)
         }
+    }
+
+    /// Despawn an entity, keeping `frozenEntities` in sync so dead IDs
+    /// don't accumulate forever.
+    func despawn(_ e: UInt32) {
+        guard let world else { return }
+        frozenEntities.remove(e)
+        RS_Despawn(world, e)
     }
 }

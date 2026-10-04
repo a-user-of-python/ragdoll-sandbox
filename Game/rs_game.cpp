@@ -11,6 +11,7 @@
 #include "rs2d/physics.h"
 
 #include <cmath>
+#include <cfloat>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -255,7 +256,13 @@ static Entity* findByBody(RSWorld* w, uint32_t body, int* limbOut) {
   return nullptr;
 }
 
-static uint32_t allocEntityId(RSWorld* w) { return w->nextEntityId++; }
+static uint32_t allocEntityId(RSWorld* w) {
+  // 0 is the "invalid entity" sentinel everywhere; never hand it out,
+  // even on (practically unreachable) UINT32_MAX wraparound.
+  uint32_t id = w->nextEntityId++;
+  if (id == 0) id = w->nextEntityId++;
+  return id;
+}
 
 // ---------------------------------------------------------------------------
 // Damage + death
@@ -853,6 +860,22 @@ void RS_Explode(RSWorld* w, float x, float y, float radius, float power) {
 
 void RS_Ignite(RSWorld* w, float x, float y, float radius) {
   if (!w || radius <= 0) return;
+  // Cap live fire zones: the fire tool ignites on every touch-move (60-120Hz),
+  // and each tick iterates zones x entities x bodies. Beyond the cap, merge
+  // into the nearest zone (refreshing its life) instead of growing forever.
+  static constexpr size_t kMaxFireZones = 200;
+  if (w->fires.size() >= kMaxFireZones) {
+    size_t best = 0;
+    float bestD2 = FLT_MAX;
+    for (size_t i = 0; i < w->fires.size(); i++) {
+      float dx = w->fires[i].x - x, dy = w->fires[i].y - y;
+      float d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) { bestD2 = d2; best = i; }
+    }
+    w->fires[best].life = 6.0f;
+    fireBurst(w, x, y, 16);
+    return;
+  }
   FireZone fz;
   fz.x = x; fz.y = y; fz.radius = radius; fz.life = 6.0f;
   w->fires.push_back(fz);
