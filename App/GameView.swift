@@ -58,7 +58,7 @@ struct GameView: View {
             Button("Open StikJIT") { StikJIT.requestEnable() }
             Button("Later", role: .cancel) {}
         } message: {
-            Text("StikJIT is installed. Enabling JIT can improve script and physics performance.")
+            Text("StikJIT is installed. This app is fully native and does not need JIT; enabling it has no effect on game performance. Status is shown for information.")
         }
     }
 }

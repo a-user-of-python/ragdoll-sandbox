@@ -43,6 +43,7 @@ struct JointRec {
 
 struct Entity {
   uint32_t id = 0;
+  uint32_t seq = 0;              // creation sequence; higher = newer (M8 topmost)
   EntityType type = EntityType::Ball;
   std::vector<uint32_t> bodies;   // physics body ids, index = limb for Human
   std::vector<JointRec> joints;
@@ -70,6 +71,7 @@ struct Particle {
   float x, y, vx, vy;
   float life, maxLife, size;
   float r, g, b, a;
+  float a0 = 1.0f;   // initial alpha; fade scales this (M5)
   uint8_t type = 0;  // 0=blood 1=fire 2=smoke 3=spark 4=debris
   bool alive = false;
 };
@@ -92,10 +94,20 @@ struct Grab {
   bool active = false;
 };
 
+// Forward declaration: implemented by Scripting/lua_bindings.cpp.
+// Tears down the Lua state associated with a world. Called before the
+// world is destroyed or fully reset.
+void RS_ScriptingWorldDestroyed(RSWorld* w);
+
+struct ExplosionJob {
+  float x, y, radius, power;
+};
+
 struct RSWorld {
   rs2d::World physics;
   std::vector<Entity> entities;
   uint32_t nextEntityId = 1;
+  uint32_t nextSeq = 1;              // M8: creation sequence for topmost queries
   std::vector<Particle> particles;
   int particleBudget = 4000;
   std::vector<Tracer> tracers;
@@ -106,9 +118,27 @@ struct RSWorld {
   float stepAccum = 0.0f;
   float lastStepMs = 0.0f;
   int physicsSubsteps = 2;
+  // M2: explicit explosion work queue (replaces recursion).
+  std::vector<ExplosionJob> explosionQueue;
+  bool processingExplosions = false;
+  // M4: impact events queued by the contact listener, processed after step.
+  struct ImpactEvent { uint32_t a, b; float px, py; float impulse; };
+  std::vector<ImpactEvent> impacts;
+  struct ImpactListener : public rs2d::ContactListener {
+    RSWorld* w = nullptr;
+    void postSolve(uint32_t a, uint32_t b, rs2d::Vec2 point,
+                   rs2d::Vec2, float impulse) override {
+      // Threshold ~400: resting contact is ~70-90/step; real impacts are 1000+.
+      if (w && impulse > 400.0f)
+        w->impacts.push_back({a, b, point.x, point.y, impulse});
+    }
+  };
+  ImpactListener impactListener;
 
   RSWorld() : physics(rs2d::Vec2(0.0f, -1600.0f)) {
     particles.resize(4000);
+    impactListener.w = this;
+    physics.setContactListener(&impactListener);
   }
 };
 
@@ -139,7 +169,7 @@ static void spawnParticle(RSWorld* w, float x, float y, float vx, float vy,
     if (!p.alive) {
       p.x = x; p.y = y; p.vx = vx; p.vy = vy;
       p.life = life; p.maxLife = life; p.size = size;
-      p.r = r; p.g = g; p.b = b; p.a = a;
+      p.r = r; p.g = g; p.b = b; p.a = a; p.a0 = a;
       p.type = type; p.alive = true;
       return;
     }
@@ -148,7 +178,7 @@ static void spawnParticle(RSWorld* w, float x, float y, float vx, float vy,
   Particle& p = w->particles[xorshift(w) % (uint32_t)cap];
   p.x = x; p.y = y; p.vx = vx; p.vy = vy;
   p.life = life; p.maxLife = life; p.size = size;
-  p.r = r; p.g = g; p.b = b; p.a = a;
+  p.r = r; p.g = g; p.b = b; p.a = a; p.a0 = a;
   p.type = type; p.alive = true;
 }
 
@@ -249,6 +279,8 @@ static void damageEntity(RSWorld* w, Entity* en, int limb, float amount,
 
 static void explodeInternal(RSWorld* w, float x, float y, float radius,
                             float power);
+static void drainExplosions(RSWorld* w);
+static void releaseGrabsForBody(RSWorld* w, uint32_t body);
 
 static float powerFromBarrel() { return 900.0f; }
 
@@ -298,10 +330,14 @@ static void damageEntity(RSWorld* w, Entity* en, int limb, float amount,
         rs2d::Vec2 p = w->physics.getPosition(en->bodies[0]);
         // Mark dead before exploding to avoid re-entrancy.
         en->alive = false;
-        explodeInternal(w, p.x, p.y, 130.0f, powerFromBarrel());
+        // M1: release grabs before the body is destroyed.
+        releaseGrabsForBody(w, en->bodies[0]);
         // Remove the barrel body.
         w->physics.destroyBody(en->bodies[0]);
         en->bodies.clear();
+        // M2: chain via the explosion work queue (iterative, no recursion).
+        w->explosionQueue.push_back({p.x, p.y, 130.0f, powerFromBarrel()});
+        drainExplosions(w);
       }
       break;
     }
@@ -314,6 +350,8 @@ static void damageEntity(RSWorld* w, Entity* en, int limb, float amount,
         (void)ang;
         debrisBurst(w, p.x, p.y, 14, 0.55f, 0.38f, 0.22f);
         smokeBurst(w, p.x, p.y, 4);
+        // M1: release grabs before the body is destroyed.
+        releaseGrabsForBody(w, en->bodies[0]);
         w->physics.destroyBody(en->bodies[0]);
         en->bodies.clear();
       }
@@ -328,11 +366,12 @@ static void damageEntity(RSWorld* w, Entity* en, int limb, float amount,
 }
 
 // ---------------------------------------------------------------------------
-// Explosion
+// Explosion (M2: iterative work queue instead of recursion)
 // ---------------------------------------------------------------------------
 
-static void explodeInternal(RSWorld* w, float x, float y, float radius,
-                            float power) {
+// One explosion's effects. May enqueue chained explosions via damageEntity.
+static void explodeOnce(RSWorld* w, float x, float y, float radius,
+                        float power) {
   // Particles.
   fireBurst(w, x, y, 24);
   smokeBurst(w, x, y, 12);
@@ -340,21 +379,32 @@ static void explodeInternal(RSWorld* w, float x, float y, float radius,
   debrisBurst(w, x, y, 10, 0.4f, 0.35f, 0.3f);
 
   // Radial impulse + damage via AABB query.
-  uint32_t hitBodies[256];
-  int hitCount = 0;
-  w->physics.queryAABB(rs2d::Vec2(x - radius, y - radius),
-                       rs2d::Vec2(x + radius, y + radius),
-                       hitBodies, &hitCount, 256);
+  // N4: page through ALL matches — the old single 256-cap query silently
+  // dropped bodies in dense scenes (23+ humans), so far bodies got no
+  // impulse and no damage.
+  std::vector<uint32_t> hitBodies;
+  {
+    uint32_t page[256];
+    int offset = 0;
+    for (;;) {
+      int cnt = 0;
+      w->physics.queryAABB(rs2d::Vec2(x - radius, y - radius),
+                           rs2d::Vec2(x + radius, y + radius),
+                           page, &cnt, 256, offset);
+      for (int i = 0; i < cnt; ++i) hitBodies.push_back(page[i]);
+      if (cnt < 256) break;
+      offset += cnt;
+    }
+  }
   // Collect (body, entity, limb) first — damage may destroy entities.
   struct Hit { uint32_t body; Entity* en; int limb; };
-  Hit hits[256];
-  int n = 0;
-  for (int i = 0; i < hitCount && n < 256; ++i) {
+  std::vector<Hit> hits;
+  for (size_t i = 0; i < hitBodies.size(); ++i) {
     int limb = 0;
     Entity* en = findByBody(w, hitBodies[i], &limb);
-    if (en && en->alive) hits[n++] = {hitBodies[i], en, limb};
+    if (en && en->alive) hits.push_back({hitBodies[i], en, limb});
   }
-  for (int i = 0; i < n; ++i) {
+  for (size_t i = 0; i < hits.size(); ++i) {
     uint32_t b = hits[i].body;
     Entity* en = hits[i].en;
     int limb = hits[i].limb;
@@ -386,6 +436,26 @@ static void explodeInternal(RSWorld* w, float x, float y, float radius,
   w->fires.push_back(fz);
 }
 
+// Drain the explosion work queue iteratively. Re-entrant safe: if we're
+// already draining (chained explosion), just return and let the outer
+// loop pick up the new job.
+static void drainExplosions(RSWorld* w) {
+  if (w->processingExplosions) return;
+  w->processingExplosions = true;
+  while (!w->explosionQueue.empty()) {
+    ExplosionJob job = w->explosionQueue.back();
+    w->explosionQueue.pop_back();
+    explodeOnce(w, job.x, job.y, job.radius, job.power);
+  }
+  w->processingExplosions = false;
+}
+
+static void explodeInternal(RSWorld* w, float x, float y, float radius,
+                            float power) {
+  w->explosionQueue.push_back({x, y, radius, power});
+  drainExplosions(w);
+}
+
 // ---------------------------------------------------------------------------
 // Spawning
 // ---------------------------------------------------------------------------
@@ -402,6 +472,7 @@ uint32_t RS_SpawnHuman(RSWorld* w, float x, float y) {
   if (!w) return 0;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Human;
   // HP per limb.
   for (int i = 0; i < LIMB_COUNT; ++i) en.limbHP[i] = 100.0f;
@@ -474,6 +545,7 @@ uint32_t RS_SpawnCrate(RSWorld* w, float x, float y, float size) {
   if (!w || size <= 0) return 0;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Crate;
   en.hp = 60.0f;
   rs2d::BodyDef d = makeBodyDef();
@@ -493,6 +565,7 @@ uint32_t RS_SpawnBarrel(RSWorld* w, float x, float y) {
   if (!w) return 0;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Barrel;
   en.hp = 30.0f;
   rs2d::BodyDef d = makeBodyDef();
@@ -513,6 +586,7 @@ uint32_t RS_SpawnBall(RSWorld* w, float x, float y, float r) {
   if (!w || r <= 0) return 0;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Ball;
   rs2d::BodyDef d = makeBodyDef();
   d.shape = rs2d::ShapeType::Circle;
@@ -532,6 +606,7 @@ uint32_t RS_SpawnPlank(RSWorld* w, float x, float y, float pw, float ph) {
   if (!w || pw <= 0 || ph <= 0) return 0;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Plank;
   rs2d::BodyDef d = makeBodyDef();
   d.shape = rs2d::ShapeType::Box;
@@ -546,7 +621,16 @@ uint32_t RS_SpawnPlank(RSWorld* w, float x, float y, float pw, float ph) {
   return id;
 }
 
+// M1: release any active grab on a body before the body is destroyed.
+// Prevents stale grabs from latching onto a reused body id.
+static void releaseGrabsForBody(RSWorld* w, uint32_t body) {
+  for (auto& g : w->grabs) {
+    if (g.active && g.body == body) { g.active = false; g.body = 0; }
+  }
+}
+
 static void destroyEntityBodies(RSWorld* w, Entity& en) {
+  for (uint32_t b : en.bodies) releaseGrabsForBody(w, b);
   for (auto& jr : en.joints) w->physics.destroyJoint(jr.jid);
   en.joints.clear();
   for (uint32_t b : en.bodies) w->physics.destroyBody(b);
@@ -554,29 +638,54 @@ static void destroyEntityBodies(RSWorld* w, Entity& en) {
   en.alive = false;
 }
 
-void RS_Despawn(RSWorld* w, uint32_t e) {
-  if (!w) return;
-  Entity* en = findEntity(w, e);
-  if (!en) return;
-  // Release grabs on its bodies.
-  for (auto& g : w->grabs) {
-    if (!g.active) continue;
-    for (uint32_t b : en->bodies) {
-      if (g.body == b) { g.active = false; g.body = 0; }
+// Erase entity by id (M3); no-op if not found. Bodies must already be
+// destroyed (or pass destroyBodies=true).
+static void eraseEntity(RSWorld* w, uint32_t e, bool destroyBodies) {
+  for (size_t i = 0; i < w->entities.size(); ++i) {
+    if (w->entities[i].id == e) {
+      if (destroyBodies) destroyEntityBodies(w, w->entities[i]);
+      w->entities[i] = std::move(w->entities.back());
+      w->entities.pop_back();
+      return;
     }
   }
+}
+
+// M3: sweep dead entities whose bodies are already gone (or destroy them).
+static void sweepDeadEntities(RSWorld* w) {
+  for (size_t i = 0; i < w->entities.size();) {
+    if (!w->entities[i].alive) {
+      // Safety: destroy any leftover bodies/joints.
+      for (auto& jr : w->entities[i].joints) w->physics.destroyJoint(jr.jid);
+      for (uint32_t b : w->entities[i].bodies) {
+        releaseGrabsForBody(w, b);
+        w->physics.destroyBody(b);
+      }
+      w->entities[i] = std::move(w->entities.back());
+      w->entities.pop_back();
+    } else {
+      ++i;
+    }
+  }
+}
+
+void RS_Despawn(RSWorld* w, uint32_t e) {
+  if (!w || e == 0) return;
+  Entity* en = findEntity(w, e);
+  if (!en) return;
+  // destroyEntityBodies releases grabs; erase removes the record (M3).
   destroyEntityBodies(w, *en);
+  eraseEntity(w, e, false);
 }
 
 void RS_DespawnAllHumans(RSWorld* w) {
   if (!w) return;
-  // Collect ids first (despawn mutates).
-  uint32_t ids[1024];
-  int n = 0;
+  // Collect ids first (despawn mutates the vector). Dynamic (M9).
+  std::vector<uint32_t> ids;
   for (auto& en : w->entities) {
-    if (en.alive && en.type == EntityType::Human && n < 1024) ids[n++] = en.id;
+    if (en.alive && en.type == EntityType::Human) ids.push_back(en.id);
   }
-  for (int i = 0; i < n; ++i) RS_Despawn(w, ids[i]);
+  for (uint32_t id : ids) RS_Despawn(w, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +723,7 @@ void RS_FireHitscan(RSWorld* w, float x, float y, float angle, int weapon) {
   if (!w) return;
   WeaponDef wd = weaponDef(weapon);
   for (int p = 0; p < wd.pellets; ++p) {
-    float a = angle + randf(w, -wd.spread, wd.spread) * 3.0f;
+    float a = angle + randf(w, -wd.spread, wd.spread);  // M6: was *3.0f
     rs2d::Vec2 p0(x, y);
     rs2d::Vec2 p1(x + cosf(a) * wd.range, y + sinf(a) * wd.range);
     rs2d::RaycastHit hit;
@@ -657,6 +766,7 @@ void RS_ThrowGrenade(RSWorld* w, float x, float y, float vx, float vy) {
   if (!w) return;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Grenade;
   en.fuse = 2.0f;
   rs2d::BodyDef d = makeBodyDef();
@@ -676,6 +786,7 @@ void RS_FireRocket(RSWorld* w, float x, float y, float angle) {
   if (!w) return;
   Entity en;
   en.id = allocEntityId(w);
+  en.seq = w->nextSeq++;
   en.type = EntityType::Rocket;
   en.life = 5.0f;
   float sp = 700.0f;
@@ -778,8 +889,13 @@ void RS_GrabMove(RSWorld* w, uint32_t grab, float x, float y) {
 
 void RS_GrabEnd(RSWorld* w, uint32_t grab) {
   if (!w || grab == 0) return;
-  for (auto& g : w->grabs) {
-    if (g.handle == grab) { g.active = false; g.body = 0; return; }
+  // M3: erase the grab record instead of just deactivating.
+  for (size_t i = 0; i < w->grabs.size(); ++i) {
+    if (w->grabs[i].handle == grab) {
+      w->grabs[i] = std::move(w->grabs.back());
+      w->grabs.pop_back();
+      return;
+    }
   }
 }
 
@@ -795,15 +911,25 @@ void RS_HealHuman(RSWorld* w, uint32_t e) {
   if (!w) return;
   Entity* en = findEntity(w, e);
   if (!en || en->type != EntityType::Human) return;
-  // Restore HP and revive. Detached limbs stay detached (bodies remain),
-  // but HP is restored and death is cleared.
+  // N6: only revive limbs that are still physically attached (have a joint).
+  // Detached limbs lost their joints when destroyed; marking them alive
+  // would create a zombie — rendered alive but falling as disconnected debris.
   for (int i = 0; i < LIMB_COUNT; ++i) {
+    if (!en->limbAlive[i]) {
+      uint32_t body = en->bodies[i];
+      bool attached = false;
+      for (auto& jr : en->joints) {
+        if (jr.bodyA == body || jr.bodyB == body) { attached = true; break; }
+      }
+      if (!attached) continue;  // detached: stays dead
+      en->limbAlive[i] = true;
+    }
     en->limbHP[i] = (i == LIMB_TORSO) ? 140.0f : (i == LIMB_HEAD ? 60.0f : 100.0f);
-    // Reattach: mark alive again (joints are gone, but limb is back as a
-    // body; this matches "just restore HP + clear death" in the contract).
-    en->limbAlive[i] = true;
   }
-  en->dead = false;
+  // Only clear death if head and torso are both alive again.
+  if (en->limbAlive[LIMB_TORSO] && en->limbAlive[LIMB_HEAD]) {
+    en->dead = false;
+  }
   en->burning = false;
   en->burnTime = 0.0f;
   bloodBurst(w, w->physics.getPosition(en->bodies[LIMB_TORSO]).x,
@@ -812,11 +938,20 @@ void RS_HealHuman(RSWorld* w, uint32_t e) {
 
 uint32_t RS_EntityAtPoint(RSWorld* w, float x, float y) {
   if (!w) return 0;
-  uint32_t body = w->physics.pickBody(rs2d::Vec2(x, y));
-  if (!body) return 0;
-  int limb = 0;
-  Entity* en = findByBody(w, body, &limb);
-  return en ? en->id : 0;
+  // M8: query all bodies near the point, return the most recently created
+  // (topmost) entity, not just the first match.
+  uint32_t bodies[64];
+  int count = 0;
+  w->physics.queryAABB(rs2d::Vec2(x - 1.0f, y - 1.0f),
+                       rs2d::Vec2(x + 1.0f, y + 1.0f),
+                       bodies, &count, 64);
+  uint32_t best = 0, bestSeq = 0;
+  for (int i = 0; i < count; ++i) {
+    int limb = 0;
+    Entity* en = findByBody(w, bodies[i], &limb);
+    if (en && en->seq > bestSeq) { bestSeq = en->seq; best = en->id; }
+  }
+  return best;
 }
 
 void RS_SetPhysicsSubsteps(RSWorld* w, int n) {
@@ -843,6 +978,7 @@ static void stepGameLogic(RSWorld* w, float dt) {
       if (en.fuse <= 0 && !en.bodies.empty()) {
         rs2d::Vec2 p = w->physics.getPosition(en.bodies[0]);
         en.alive = false;
+        releaseGrabsForBody(w, en.bodies[0]);  // M1
         w->physics.destroyBody(en.bodies[0]);
         en.bodies.clear();
         explodeInternal(w, p.x, p.y, 150.0f, 1100.0f);
@@ -862,6 +998,7 @@ static void stepGameLogic(RSWorld* w, float dt) {
         float ix = impact ? hit.point.x : np.x;
         float iy = impact ? hit.point.y : np.y;
         en.alive = false;
+        releaseGrabsForBody(w, b);  // M1
         w->physics.destroyBody(b);
         en.bodies.clear();
         explodeInternal(w, ix, iy, 120.0f, 800.0f);
@@ -880,6 +1017,13 @@ static void stepGameLogic(RSWorld* w, float dt) {
   // --- Grab springs (stiff spring toward target) ---
   for (auto& g : w->grabs) {
     if (!g.active || !g.body) continue;
+    // M1: validate the body still belongs to a live entity (defense in
+    // depth; releaseGrabsForBody should have caught destruction already).
+    int dummyLimb = 0;
+    if (!findByBody(w, g.body, &dummyLimb)) {
+      g.active = false; g.body = 0;
+      continue;
+    }
     rs2d::Vec2 p = w->physics.getPosition(g.body);
     rs2d::Vec2 v = w->physics.getVelocity(g.body);
     // Critically-damped-ish spring: F = k*(target - p) - c*v.
@@ -982,9 +1126,9 @@ static void stepGameLogic(RSWorld* w, float dt) {
       p.vy += 60.0f * dt;
       p.vx *= (1.0f - 1.5f * dt);
     }
-    // Fade alpha by life.
+    // Fade alpha by life, scaling the initial alpha (M5).
     float t = p.life / p.maxLife;
-    p.a = t < 1.0f ? t : 1.0f;
+    p.a = p.a0 * (t < 1.0f ? t : 1.0f);
   }
 
   // --- Tracers fade ---
@@ -998,31 +1142,65 @@ static void stepGameLogic(RSWorld* w, float dt) {
   }
 }
 
+// M4: process queued impact events (from the contact listener) after the
+// physics substeps. Damages human limbs involved in hard impacts.
+static void processImpacts(RSWorld* w) {
+  for (auto& im : w->impacts) {
+    // Damage scales with impulse above the 400 threshold.
+    float dmg = (im.impulse - 400.0f) * 0.03f;
+    if (dmg <= 0) continue;
+    int limbA = -1, limbB = -1;
+    // findByBody validates against live entities (guards destroyed bodies).
+    Entity* ea = findByBody(w, im.a, &limbA);
+    Entity* eb = findByBody(w, im.b, &limbB);
+    if (ea && ea->type == EntityType::Human && !ea->dead && limbA >= 0) {
+      damageEntity(w, ea, limbA, dmg, im.px, im.py);
+      bloodBurst(w, im.px, im.py, 3);
+    }
+    if (eb && eb != ea && eb->type == EntityType::Human && !eb->dead &&
+        limbB >= 0) {
+      damageEntity(w, eb, limbB, dmg, im.px, im.py);
+      bloodBurst(w, im.px, im.py, 3);
+    }
+  }
+  w->impacts.clear();
+}
+
 void RS_Step(RSWorld* w, float dt) {
   if (!w || dt <= 0) return;
   auto t0 = std::chrono::steady_clock::now();
 
-  // Fixed-timestep accumulator: 1/60 substeps, max 4 steps.
+  // Fixed-timestep accumulator: 1/60 ticks, max 4 ticks.
+  // M7: physicsSubsteps (1..4) subdivides each tick AND scales iterations.
   const float stepDt = 1.0f / 60.0f;
   w->stepAccum += dt;
   if (w->stepAccum > stepDt * 4) w->stepAccum = stepDt * 4;  // clamp
+  int n = w->physicsSubsteps;
+  if (n < 1) n = 1; if (n > 4) n = 4;
   int velIters = 8, posIters = 3;
-  switch (w->physicsSubsteps) {
+  switch (n) {
     case 1: velIters = 6; posIters = 2; break;
-    case 3: velIters = 12; posIters = 4; break;
-    case 4: velIters = 16; posIters = 6; break;
+    case 3: velIters = 10; posIters = 4; break;
+    case 4: velIters = 12; posIters = 5; break;
     default: break;  // 2: 8/3
   }
+  float subDt = stepDt / (float)n;
   int steps = 0;
   while (w->stepAccum >= stepDt && steps < 4) {
-    w->physics.step(stepDt, velIters, posIters);
+    for (int s = 0; s < n; ++s)
+      w->physics.step(subDt, velIters, posIters);
     stepGameLogic(w, stepDt);
     w->stepAccum -= stepDt;
     ++steps;
   }
+  // M4: impact damage after physics, before Lua.
+  processImpacts(w);
 
   // Lua on_tick, once per RS_Step (not per substep).
   RS_LuaTick(w);
+
+  // M3: erase dead entities now that no iteration is in progress.
+  sweepDeadEntities(w);
 
   auto t1 = std::chrono::steady_clock::now();
   w->lastStepMs =
@@ -1035,10 +1213,15 @@ void RS_Step(RSWorld* w, float dt) {
 
 RSWorld* RS_CreateWorld(void) { return new RSWorld(); }
 
-void RS_DestroyWorld(RSWorld* w) { delete w; }
+void RS_DestroyWorld(RSWorld* w) {
+  if (!w) return;
+  RS_ScriptingWorldDestroyed(w); // delete bound Lua state before freeing w
+  delete w;
+}
 
 void RS_ClearWorld(RSWorld* w) {
   if (!w) return;
+  RS_ScriptingWorldDestroyed(w); // drop mod state before clearing entities
   for (auto& en : w->entities) {
     if (en.alive) destroyEntityBodies(w, en);
   }
@@ -1046,8 +1229,13 @@ void RS_ClearWorld(RSWorld* w) {
   w->grabs.clear();
   w->fires.clear();
   w->tracers.clear();
+  w->explosionQueue.clear();
+  w->impacts.clear();
+  w->processingExplosions = false;
   for (auto& p : w->particles) p.alive = false;
-  w->nextEntityId = 1;
+  // N5: do NOT reset nextEntityId/nextSeq. A mod holding an entity id
+  // across a clear would see it silently reissued to a different entity
+  // (use-after-clear aliasing). Ids stay monotonic for the world's lifetime.
   w->stepAccum = 0.0f;
 }
 

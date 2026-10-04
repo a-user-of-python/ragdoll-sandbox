@@ -107,6 +107,13 @@ struct Camera {
         scale = min(max(scale, 0.2), 6.0)
     }
 
+    /// Keep the camera near the world so it can't be flung irretrievably
+    /// off-screen. (2026-10-04)
+    mutating func clampCenter() {
+        center.x = min(max(center.x, -4000), 4000)
+        center.y = min(max(center.y, -4000), 4000)
+    }
+
     func screenToWorld(_ p: CGPoint, viewport: CGSize) -> SIMD2<Float> {
         let fx = Float(p.x), fy = Float(p.y)
         let w = Float(viewport.width), h = Float(viewport.height)

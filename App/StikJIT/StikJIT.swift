@@ -22,9 +22,19 @@ enum StikJIT {
         case unavailable        // StikJIT not installed
     }
 
+    /// Cached probe result: canMapJITPage() does an mmap/munmap syscall pair,
+    /// and SettingsView reads status several times per render. Refresh on
+    /// demand via refreshStatus(). (2026-10-04)
+    private static var cachedStatus: Status?
+    static func refreshStatus() { cachedStatus = nil }
+
     static var status: Status {
-        if canMapJITPage() { return .enabled }
-        return isStikJITInstalled ? .available : .unavailable
+        if let s = cachedStatus { return s }
+        let s: Status
+        if canMapJITPage() { s = .enabled }
+        else { s = isStikJITInstalled ? .available : .unavailable }
+        cachedStatus = s
+        return s
     }
 
     static var statusText: String {

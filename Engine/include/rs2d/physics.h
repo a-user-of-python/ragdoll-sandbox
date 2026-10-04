@@ -135,6 +135,10 @@ class World {
   bool raycast(Vec2 p0, Vec2 p1, RaycastHit* out) const;
   // Bodies whose AABB overlaps [mn,mx]. *count set to number written.
   void queryAABB(Vec2 mn, Vec2 mx, uint32_t* out, int* count, int max) const;
+  // N4: paginated variant — skips the first `offset` matches so callers can
+  // loop until count < max and never silently drop bodies past the cap.
+  void queryAABB(Vec2 mn, Vec2 mx, uint32_t* out, int* count, int max,
+                 int offset) const;
   // First non-static body containing point p (for grab tool).
   uint32_t pickBody(Vec2 p) const;
 

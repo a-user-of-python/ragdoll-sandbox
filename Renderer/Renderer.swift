@@ -72,6 +72,7 @@ public final class MetalRenderer {
     private weak var mtkView: MTKView?
     private let semaphore = DispatchSemaphore(value: framesInFlight)
     private var frameIndex: Int = 0
+    private var lastBudgetLog: CFTimeInterval = 0
     private var renderScale: Float = 1.0
     public var gridEnabled: Bool = true
 
@@ -192,6 +193,18 @@ public final class MetalRenderer {
     public func submit(items: [RSRenderItem],
                        particles: [RSParticle],
                        viewMatrix: simd_float3x3) {
+        items.withUnsafeBufferPointer { ib in
+            particles.withUnsafeBufferPointer { pb in
+                submit(items: ib, particles: pb, viewMatrix: viewMatrix)
+            }
+        }
+    }
+
+    /// Zero-copy submit: pass the App's reusable gather buffers directly.
+    /// No per-frame allocation. (2026-10-04)
+    public func submit(items: UnsafeBufferPointer<RSRenderItem>,
+                       particles: UnsafeBufferPointer<RSParticle>,
+                       viewMatrix: simd_float3x3) {
         guard let view = mtkView else { return }
         semaphore.wait()
 
@@ -210,6 +223,16 @@ public final class MetalRenderer {
         let nCircle = fillCircles(items, into: circleBufs[slot], cap: b.circles)
         let nSeg = fillSegments(items, into: segmentBufs[slot], cap: b.segments)
         let (nAlpha, nAdd) = fillParticles(particles, into: particleBufs[slot], cap: b.particles)
+        // Budget overflow is silent by design (hot path), but log it at most
+        // once per second so busy scenes get a diagnostic. (2026-10-04)
+        let dropped = (items.count - nBox - nCircle - nSeg) + (particles.count - nAlpha - nAdd)
+        if dropped > 0 {
+            let now = CACurrentMediaTime()
+            if now - lastBudgetLog > 1.0 {
+                lastBudgetLog = now
+                print("[MetalRenderer] dropped \(dropped) instances over budget")
+            }
+        }
         writeUniforms(into: uniformBufs[slot], viewMatrix: viewMatrix, view: view)
 
         guard let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) else {
@@ -277,20 +300,35 @@ public final class MetalRenderer {
     }
 
     private func writeUniforms(into buf: MTLBuffer, viewMatrix: simd_float3x3, view: MTKView) {
-        let px = view.drawableSize
-        let cs = max(view.contentScaleFactor, 1)
-        let pts = SIMD2<Float>(Float(px.width) / Float(cs), Float(px.height) / Float(cs))
-        var u = RSUniforms(viewMatrix: viewMatrix,
+        // NDC mapping must use the VIEW's point size, not drawableSize:
+        // drawableSize folds in renderScale, so deriving pts from it doubles
+        // the zoom at 50% scale. (Bug fix 2026-10-04.)
+        let bounds = view.bounds.size
+        // Guard degenerate sizes (pre-layout submit): avoid inf ndcScale.
+        let pw = max(Float(bounds.width), 1), ph = max(Float(bounds.height), 1)
+        let pts = SIMD2<Float>(pw, ph)
+        // Guard singular viewMatrix (zero scale): simd_inverse would produce
+        // NaN and corrupt the grid pass. Fall back to identity.
+        let vm: simd_float3x3
+        let det = viewMatrix.columns.0.x * (viewMatrix.columns.1.y * viewMatrix.columns.2.z - viewMatrix.columns.1.z * viewMatrix.columns.2.y)
+                  - viewMatrix.columns.0.y * (viewMatrix.columns.1.x * viewMatrix.columns.2.z - viewMatrix.columns.1.z * viewMatrix.columns.2.x)
+                  + viewMatrix.columns.0.z * (viewMatrix.columns.1.x * viewMatrix.columns.2.y - viewMatrix.columns.1.y * viewMatrix.columns.2.x)
+        if abs(det) < 1e-12 {
+            vm = matrix_identity_float3x3
+        } else {
+            vm = viewMatrix
+        }
+        var u = RSUniforms(viewMatrix: vm,
                            ndcScale: SIMD2<Float>(2, 2) / pts,
                            time: Float(CACurrentMediaTime()),
-                           invViewMatrix: simd_inverse(viewMatrix))
+                           invViewMatrix: simd_inverse(vm))
         memcpy(buf.contents(), &u, MemoryLayout<RSUniforms>.stride)
     }
 
     // Each fill* writes RSInstance records straight into the ring buffer and
     // returns the clamped instance count. No intermediate allocations.
 
-    private func fillBoxes(_ items: [RSRenderItem], into buf: MTLBuffer, cap: Int) -> Int {
+    private func fillBoxes(_ items: UnsafeBufferPointer<RSRenderItem>, into buf: MTLBuffer, cap: Int) -> Int {
         var p = buf.contents().assumingMemoryBound(to: RSInstance.self)
         var n = 0
         for it in items where it.shape == 0 && n < cap {
@@ -303,7 +341,7 @@ public final class MetalRenderer {
         return n
     }
 
-    private func fillCircles(_ items: [RSRenderItem], into buf: MTLBuffer, cap: Int) -> Int {
+    private func fillCircles(_ items: UnsafeBufferPointer<RSRenderItem>, into buf: MTLBuffer, cap: Int) -> Int {
         var p = buf.contents().assumingMemoryBound(to: RSInstance.self)
         var n = 0
         for it in items where it.shape == 1 && n < cap {
@@ -316,7 +354,7 @@ public final class MetalRenderer {
         return n
     }
 
-    private func fillSegments(_ items: [RSRenderItem], into buf: MTLBuffer, cap: Int) -> Int {
+    private func fillSegments(_ items: UnsafeBufferPointer<RSRenderItem>, into buf: MTLBuffer, cap: Int) -> Int {
         var p = buf.contents().assumingMemoryBound(to: RSInstance.self)
         var n = 0
         // shape==2: (x,y)=p0, (w,h)=p1, angle unused. Width is RS_SEGMENT_WIDTH
@@ -333,7 +371,7 @@ public final class MetalRenderer {
 
     /// Splits particles into alpha-blended [0, nAlpha) then additive
     /// [nAlpha, nAlpha+nAdd), matching the two draw calls in submit().
-    private func fillParticles(_ parts: [RSParticle], into buf: MTLBuffer, cap: Int) -> (Int, Int) {
+    private func fillParticles(_ parts: UnsafeBufferPointer<RSParticle>, into buf: MTLBuffer, cap: Int) -> (Int, Int) {
         var p = buf.contents().assumingMemoryBound(to: RSInstance.self)
         var nAlpha = 0, nAdd = 0
         // Pass 1: alpha types (blood 0, smoke 2, debris 4)

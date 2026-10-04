@@ -139,14 +139,22 @@ vertex VSOut vs_segment(uint vid [[vertex_id]],
     float2 p1 = ins.posSize.zw;
     float2 dir = p1 - p0;
     float len = max(length(dir), 1e-5);
-    float2 n = float2(-dir.y, dir.x) / len;
+    float2 dn = dir / len;
+    float2 n = float2(-dn.y, dn.x);
+    // Round caps: extend the quad half a width past each endpoint so the
+    // fragment cap-SDF has room to work. (Bug fix 2026-10-04: previously the
+    // quad ended exactly at p0/p1, making the cap code dead and caps flat.)
+    float hw = RS_SEGMENT_WIDTH * 0.5;
+    float2 e0 = p0 - dn * hw;
+    float2 e1 = p1 + dn * hw;
     float2 c = float2(float(vid & 1u), float((vid >> 1u) & 1u));
-    float2 world = mix(p0, p1, c.x) + n * (c.y - 0.5) * RS_SEGMENT_WIDTH;
+    float2 world = mix(e0, e1, c.x) + n * (c.y - 0.5) * RS_SEGMENT_WIDTH;
     float3 vp = u.viewMatrix * float3(world, 1.0);
     VSOut out;
     out.pos   = float4(vp.xy * u.ndcScale, 0.0, 1.0);
     out.color = ins.color;
-    out.uv    = c;
+    // uv.x: 0 at p0, 1 at p1 (cap SDF measures past [0,1]); uv.y across.
+    out.uv    = float2((c.x * (len + 2.0 * hw) - hw) / len, c.y);
     out.misc  = ins.misc;
     out.world = world;
     return out;
@@ -220,11 +228,17 @@ fragment float4 fs_grid(GridOut in [[stage_in]])
     float3 bg = float3(0.055, 0.060, 0.075);
     // minor cells 50u, major 250u, anti-aliased
     float2 gp = in.world / 50.0;
-    float2 gf = abs(fract(gp - 0.5) - 0.5) / max(fwidth(gp), float2(1e-5));
+    float2 gfw = max(fwidth(gp), float2(1e-5));
+    float2 gf = abs(fract(gp - 0.5) - 0.5) / gfw;
     float minor = 1.0 - min(min(gf.x, gf.y), 1.0);
+    // Fade lines out when cells go sub-pixel (far zoom-out); otherwise the
+    // AA saturates and the whole background washes out. (2026-10-04)
+    minor *= 1.0 - smoothstep(0.25, 0.5, min(gfw.x, gfw.y));
     float2 Hp = in.world / 250.0;
-    float2 Hf = abs(fract(Hp - 0.5) - 0.5) / max(fwidth(Hp), float2(1e-5));
+    float2 Hfw = max(fwidth(Hp), float2(1e-5));
+    float2 Hf = abs(fract(Hp - 0.5) - 0.5) / Hfw;
     float major = 1.0 - min(min(Hf.x, Hf.y), 1.0);
+    major *= 1.0 - smoothstep(0.25, 0.5, min(Hfw.x, Hfw.y));
     float3 col = bg + float3(0.45, 0.50, 0.60) * minor * 0.10
                     + float3(0.55, 0.60, 0.70) * major * 0.16;
     return float4(col, 1.0);

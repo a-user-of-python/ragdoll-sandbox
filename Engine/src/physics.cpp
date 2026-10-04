@@ -17,6 +17,18 @@ Vec2 rotate(const Vec2& v, float angle) {
   return Vec2(c * v.x - s * v.y, s * v.x + c * v.y);
 }
 
+// N1: normalize a relative joint angle to [-PI, PI]. Body angles accumulate
+// unboundedly in integrate(), so without this the limit check compares a
+// multi-revolution angle against radian limits after forced large rotations
+// (explosion spin, teleport), applying correction as if massively violated.
+static float wrapAngle(float a) {
+  const float PI = 3.14159265358979323846f;
+  const float TAU = 2.0f * PI;
+  a = std::fmod(a + PI, TAU);
+  if (a < 0.0f) a += TAU;
+  return a - PI;
+}
+
 // ---- Body / Joint / Contact (World:: member types, defined here) ---------
 
 struct World::Body {
@@ -389,7 +401,10 @@ uint32_t World::createBody(const BodyDef& def) {
   if (def.shape == ShapeType::Circle) {
     b.radius = def.radius > 0.5f ? def.radius : 0.5f;
   } else if (def.shape == ShapeType::Box) {
-    b.halfExtents = def.halfExtents;
+    // N7: clamp like circles — zero extents make an immovable ghost
+    // (zero area -> zero mass), negative extents invert the geometry.
+    b.halfExtents = Vec2(def.halfExtents.x > 0.5f ? def.halfExtents.x : 0.5f,
+                         def.halfExtents.y > 0.5f ? def.halfExtents.y : 0.5f);
     buildBoxVerts(b);
   } else {
     int n = def.polygonCount < 8 ? def.polygonCount : 8;
@@ -503,7 +518,7 @@ float World::getJointAngle(uint32_t id) const {
   const Body* A = getBody(j.a);
   const Body* B = getBody(j.b);
   if (!A || !B) return 0.0f;
-  return (B->angle - A->angle) - j.refAngle;
+  return wrapAngle((B->angle - A->angle) - j.refAngle);  // N1: normalized
 }
 
 void World::setContactListener(ContactListener* listener) {
@@ -567,6 +582,21 @@ void World::computeAABB(Body& b) {
 void World::integrate(float dt) {
   for (auto& b : impl_->bodies) {
     if (!b.alive || b.isStatic) continue;
+    // N3: a NaN/inf anywhere (bad mod input via applyImpulse, 0/0 in game
+    // code) permanently zombies the body — NaN position spreads to the AABB
+    // and poisons the broadphase. Sanitize: kill the velocity and snap to
+    // the last finite state so one bad value can't corrupt the world.
+    if (!std::isfinite(b.vel.x) || !std::isfinite(b.vel.y) ||
+        !std::isfinite(b.angVel) || !std::isfinite(b.pos.x) ||
+        !std::isfinite(b.pos.y) || !std::isfinite(b.angle)) {
+      b.vel = Vec2(0.0f, 0.0f);
+      b.angVel = 0.0f;
+      if (!std::isfinite(b.pos.x)) b.pos.x = 0.0f;
+      if (!std::isfinite(b.pos.y)) b.pos.y = 0.0f;
+      if (!std::isfinite(b.angle)) b.angle = 0.0f;
+      computeAABB(b);
+      continue;
+    }
     b.vel += gravity_ * dt;
     // damping
     b.vel *= 1.0f / (1.0f + b.linearDamping * dt);
@@ -828,7 +858,7 @@ void World::solveJointsVelocity(float dt) {
     }
     // angle limits
     if (j.isRevolute && j.enableLimit) {
-      float jointAngle = (B->angle - A->angle) - j.refAngle;
+      float jointAngle = wrapAngle((B->angle - A->angle) - j.refAngle);  // N1
       float limitC = 0.0f;
       float sign = 0.0f;
       if (jointAngle < j.lower) { limitC = jointAngle - j.lower; sign = 1.0f; }
@@ -837,6 +867,14 @@ void World::solveJointsVelocity(float dt) {
         float k = A->invI + B->invI;
         if (k > 1e-9f) {
           float dL = sign * (-limitC) / k * 8.0f;  // stiff correction
+          // N2: cap the per-step kick. Without this a large violation
+          // (teleport, one bad frame) produces a ~156 rad/s fling in one
+          // step. Cap each body's angular-velocity change at 30 rad/s.
+          float mi = A->invI > B->invI ? A->invI : B->invI;
+          if (mi < 1e-9f) mi = 1e-9f;
+          float maxDL = 30.0f / mi;
+          if (dL > maxDL) dL = maxDL;
+          else if (dL < -maxDL) dL = -maxDL;
           float old = j.limitImpulse;
           j.limitImpulse += dL;
           // clamp: limit impulse opposes violation; keep simple accumulation clamp
@@ -888,7 +926,7 @@ void World::solveJointsPosition() {
     B->pos -= corr * B->invMass;
     // angular correction: limits for revolute, full lock for weld
     {
-      float jointAngle = (B->angle - A->angle) - j.refAngle;
+      float jointAngle = wrapAngle((B->angle - A->angle) - j.refAngle);  // N1
       float k = A->invI + B->invI;
       if (k > 1e-9f) {
         float corrA = 0.0f;
@@ -1064,13 +1102,26 @@ bool World::raycast(Vec2 p0, Vec2 p1, RaycastHit* out) const {
 }
 
 void World::queryAABB(Vec2 mn, Vec2 mx, uint32_t* out, int* count, int max) const {
+  queryAABB(mn, mx, out, count, max, 0);
+}
+
+// N4: offset lets callers page through all matches instead of silently
+// dropping bodies past `max`.
+void World::queryAABB(Vec2 mn, Vec2 mx, uint32_t* out, int* count, int max,
+                      int offset) const {
   int n = 0;
+  int skipped = 0;
   for (auto& b : impl_->bodies) {
     if (!b.alive) continue;
     if (b.aabb.mx.x < mn.x || b.aabb.mn.x > mx.x ||
         b.aabb.mx.y < mn.y || b.aabb.mn.y > mx.y)
       continue;
-    if (n < max) out[n++] = b.id;
+    if (skipped < offset) { ++skipped; continue; }
+    if (n < max) {
+      out[n++] = b.id;
+    } else {
+      break;  // page full; caller advances offset for the next page
+    }
   }
   if (count) *count = n;
 }

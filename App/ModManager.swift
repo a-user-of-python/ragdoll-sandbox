@@ -51,9 +51,12 @@ enum ModManager {
     }
 
     /// Run every enabled mod against the world. Returns error strings.
+    /// Disabling a mod means reset + reload: the whole Lua state is dropped
+    /// first (RS_LuaReset), then each enabled mod loads into the fresh state.
     @discardableResult
     static func loadEnabledMods(world: UnsafeMutablePointer<RSWorld>) -> [String] {
         var errors: [String] = []
+        RS_LuaReset(world)
         for name in availableMods() where isEnabled(name) {
             let url = modsDirectory
                 .appendingPathComponent(name)

@@ -38,3 +38,16 @@ target_include_directories(rs_game_tests PRIVATE
 )
 enable_testing()
 add_test(NAME game_tests COMMAND rs_game_tests)
+
+# Sandbox hardening tests (H1-H6): real game + real Lua bindings.
+add_executable(test_lua_hardening
+  tests/test_lua_hardening.cpp
+)
+target_link_libraries(test_lua_hardening PRIVATE rs_game rs_lua)
+target_include_directories(test_lua_hardening PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Engine/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Scripting
+)
+target_compile_options(test_lua_hardening PRIVATE -Wall -Wextra)
+add_test(NAME lua_hardening COMMAND test_lua_hardening)

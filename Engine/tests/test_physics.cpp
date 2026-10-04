@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cmath>
 #include <ctime>
+#include <vector>
+#include <algorithm>
 
 static int failures = 0;
 #define CHECK(cond) do { \
@@ -373,6 +375,12 @@ void test_perf_500() {
   CHECK(ms < 50.0);  // generous host bound; target device is much faster
 }
 
+void test_N1_angle_wrap();
+void test_N2_impulse_cap();
+void test_N3_nan_sanitize();
+void test_N4_query_pagination();
+void test_N7_box_extents();
+
 int main() {
   test_fall_and_rest();
   test_revolute_holds();
@@ -391,7 +399,117 @@ int main() {
   test_contact_listener();
   test_aabb_query();
   test_perf_500();
+  test_N1_angle_wrap();
+  test_N2_impulse_cap();
+  test_N3_nan_sanitize();
+  test_N4_query_pagination();
+  test_N7_box_extents();
   if (failures == 0) printf("ALL RS2D TESTS PASSED\n");
   else printf("%d FAILURES\n", failures);
   return failures == 0 ? 0 : 1;
+}
+
+// N1: getJointAngle must normalize to [-PI, PI] even after the body angle
+// has accumulated multiple revolutions (teleport / explosion spin).
+void test_N1_angle_wrap() {
+  World w(Vec2(0, 0));
+  BodyDef a = boxDef(0, 0, 10, 40);
+  a.isStatic = true;
+  BodyDef b = boxDef(0, -60, 8, 30);
+  uint32_t ida = w.createBody(a), idb = w.createBody(b);
+  RevoluteDef rd;
+  rd.a = ida; rd.b = idb;
+  rd.anchor = Vec2(0, -40);
+  rd.lower = -0.5f; rd.upper = 0.5f;
+  rd.enableLimit = true;
+  uint32_t j = w.createRevolute(rd);
+  CHECK(j != 0);
+  // Force B through ~3.18 revolutions.
+  w.setTransform(idb, Vec2(0, -60), 20.0f);
+  float ang = w.getJointAngle(j);
+  CHECK(ang >= -3.14159f && ang <= 3.14159f);
+  // 20 rad wraps to 20 - 6*PI ~= 1.1504.
+  CHECK_CLOSE(ang, 20.0f - 6.0f * 3.14159265f, 1e-3f);
+  printf("test_N1_angle_wrap: %.4f\n", ang);
+}
+
+// N2: a huge limit violation must not produce a huge angular kick in one step.
+void test_N2_impulse_cap() {
+  World w(Vec2(0, 0));
+  BodyDef a = boxDef(0, 0, 10, 40);
+  a.isStatic = true;
+  BodyDef b = boxDef(0, -60, 8, 30);
+  uint32_t ida = w.createBody(a), idb = w.createBody(b);
+  RevoluteDef rd;
+  rd.a = ida; rd.b = idb;
+  rd.anchor = Vec2(0, -40);
+  rd.lower = -0.5f; rd.upper = 0.5f;
+  rd.enableLimit = true;
+  w.createRevolute(rd);
+  // 20-rad violation (would previously kick ~156 rad/s in one step).
+  w.setTransform(idb, Vec2(0, -60), 20.0f);
+  w.setAngularVelocity(idb, 0.0f);
+  w.step(1.0f / 60.0f, 8, 3);
+  float av = w.getAngularVelocity(idb);
+  CHECK(std::isfinite(av));
+  CHECK(std::fabs(av) < 35.0f);  // cap is 30 rad/s per step + margin
+  printf("test_N2_impulse_cap: av=%.2f\n", av);
+}
+
+// N3: NaN velocity/position must be sanitized, not poison the world forever.
+void test_N3_nan_sanitize() {
+  World w(Vec2(0, -1600));
+  BodyDef b = boxDef(0, 200, 10, 10);
+  uint32_t id = w.createBody(b);
+  float nan = std::nanf("");
+  w.setVelocity(id, Vec2(nan, 0.0f));
+  for (int i = 0; i < 120; ++i) w.step(1.0f / 60.0f, 8, 3);
+  Vec2 p = w.getPosition(id);
+  Vec2 v = w.getVelocity(id);
+  CHECK(std::isfinite(p.x) && std::isfinite(p.y));
+  CHECK(std::isfinite(v.x) && std::isfinite(v.y));
+  // Body should have fallen normally after sanitization (not stuck at NaN).
+  printf("test_N3_nan_sanitize: p=(%.1f,%.1f)\n", p.x, p.y);
+}
+
+// N4: paginated queryAABB must return every match, never silently truncate.
+void test_N4_query_pagination() {
+  World w(Vec2(0, 0));
+  for (int i = 0; i < 300; ++i) {
+    BodyDef b = boxDef((float)(i % 30) * 10.0f, (float)(i / 30) * 10.0f, 4, 4);
+    w.createBody(b);
+  }
+  uint32_t page[256];
+  std::vector<uint32_t> all;
+  int offset = 0;
+  for (;;) {
+    int cnt = 0;
+    w.queryAABB(Vec2(-100, -100), Vec2(400, 400), page, &cnt, 256, offset);
+    for (int i = 0; i < cnt; ++i) all.push_back(page[i]);
+    if (cnt < 256) break;
+    offset += cnt;
+  }
+  CHECK(all.size() == 300);
+  // All ids unique.
+  std::sort(all.begin(), all.end());
+  for (size_t i = 1; i < all.size(); ++i) CHECK(all[i] != all[i - 1]);
+  printf("test_N4_query_pagination: %zu bodies\n", all.size());
+}
+
+// N7: zero/negative box extents are clamped to 0.5 (like circle radius).
+void test_N7_box_extents() {
+  World w(Vec2(0, 0));
+  BodyDef z = boxDef(0, 0, 0.0f, 0.0f);
+  uint32_t idz = w.createBody(z);
+  CHECK(idz != 0);
+  AABB az = w.getAABB(idz);
+  CHECK(az.mx.x - az.mn.x >= 0.9f);
+  CHECK(az.mx.y - az.mn.y >= 0.9f);
+  BodyDef neg = boxDef(50, 0, -5.0f, -3.0f);
+  uint32_t idn = w.createBody(neg);
+  CHECK(idn != 0);
+  AABB an = w.getAABB(idn);
+  CHECK(an.mx.x > an.mn.x && an.mx.y > an.mn.y);  // not inverted
+  CHECK(an.mx.x - an.mn.x >= 0.9f);
+  printf("test_N7_box_extents ok\n");
 }

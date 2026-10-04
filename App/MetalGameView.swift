@@ -6,11 +6,18 @@ import UIKit
 import MetalKit
 import simd
 
+/// Weak CADisplayLink target: breaks the displayLink -> target -> displayLink
+/// retain cycle so MetalGameView.deinit actually runs. (2026-10-04)
+private final class DisplayLinkProxy {
+    weak var owner: MetalGameView?
+    init(owner: MetalGameView) { self.owner = owner }
+    @objc func tick(_ link: CADisplayLink) { owner?.frameTick(link) }
+}
+
 /// Container view: owns the MTKView, the Renderer, the display link, and all
 /// touch handling. Single-finger = active tool (or spawn placement);
 /// two-finger = pan + pinch zoom.
-final class MetalGameView: UIView {
-    var state: GameState
+final class MetalGameView: UIView {    var state: GameState
 
     private var mtkView: MTKView!
     private var renderer: MetalRenderer!
@@ -37,7 +44,7 @@ final class MetalGameView: UIView {
     private var gestureTouches: [UITouch] = []
     private var gestureStartDist: CGFloat = 0
     private var gestureStartScale: Float = 1
-    private var gestureLastMid: CGPoint = .zero
+    private var gestureAnchorWorld = SIMD2<Float>.zero
 
     // Stat publish throttle.
     private var lastStatPublish = CFTimeInterval(0)
@@ -86,8 +93,12 @@ final class MetalGameView: UIView {
 
         isMultipleTouchEnabled = true
 
-        displayLink = CADisplayLink(target: self, selector: #selector(tick(_:)))
-        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        // Weak proxy breaks the CADisplayLink -> target -> displayLink retain
+        // cycle (2026-10-04: deinit was dead code before this).
+        displayLink = CADisplayLink(target: DisplayLinkProxy(owner: self),
+                                    selector: #selector(DisplayLinkProxy.tick(_:)))
+        // Game targets 60fps; 120Hz ProMotion doubles CPU/GPU cost for no benefit.
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
         displayLink.add(to: .main, forMode: .common)
     }
 
@@ -106,7 +117,13 @@ final class MetalGameView: UIView {
 
     // MARK: - Frame loop
 
-    @objc private func tick(_ link: CADisplayLink) {
+    /// Called by DisplayLinkProxy (weak target). Was @objc/private on self,
+    /// which created the retain cycle.
+    func frameTick(_ link: CADisplayLink) {
+        tick(link)
+    }
+
+    private func tick(_ link: CADisplayLink) {
         let rawDt = link.duration > 0 ? link.duration : 1.0 / 60.0
         let dt = min(max(rawDt, 1.0 / 240.0), 1.0 / 20.0)
         fpsEMA += (1.0 / rawDt - fpsEMA) * 0.05
@@ -132,8 +149,8 @@ final class MetalGameView: UIView {
             }
             nParticles = kept
         }
-        let items = Array(UnsafeBufferPointer(start: itemBuf, count: nItems))
-        let particles = Array(UnsafeBufferPointer(start: particleBuf, count: nParticles))
+        let items = UnsafeBufferPointer(start: itemBuf, count: nItems)
+        let particles = UnsafeBufferPointer(start: particleBuf, count: nParticles)
 
         let matrix = state.camera.viewMatrix(viewport: bounds.size)
 
@@ -158,64 +175,76 @@ final class MetalGameView: UIView {
     }
 
     // MARK: - Touch handling
+    // Clean state machine (rewritten 2026-10-04; the old one could never
+    // reach the two-finger state and misfired tools on gesture end):
+    //   1 active touch  -> tool touch (trackingTouch)
+    //   2+ active touches -> pan/pinch gesture (first two fingers); tool cancelled
+    // A finger that participated in a gesture never auto-starts a tool touch
+    // when the gesture ends (prevents stray explosions/deletions).
+    private var activeTouches: [UITouch] = []
+    private var toolSuppressed = Set<UITouch>()
 
     private func worldPoint(_ touch: UITouch) -> SIMD2<Float> {
         state.camera.screenToWorld(touch.location(in: self), viewport: bounds.size)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        let ordered = touches.sorted { $0.timestamp < $1.timestamp }
-        for t in ordered {
-            if gestureTouches.count + (trackingTouch == nil ? 0 : 1) >= 2 || gestureTouches.count >= 1 {
-                // Second finger: switch to pan/pinch, cancel tool work.
-                cancelToolTouch()
-                if !gestureTouches.contains(t) { gestureTouches.append(t) }
-                if gestureTouches.count == 2 { beginGesture() }
-                continue
-            }
-            if trackingTouch == nil && gestureTouches.isEmpty {
-                trackingTouch = t
-                beginToolTouch(t)
-            } else if !gestureTouches.contains(t) {
-                cancelToolTouch()
-                gestureTouches.append(t)
-                if gestureTouches.count == 2 { beginGesture() }
-            }
+        for t in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
+            if !activeTouches.contains(t) { activeTouches.append(t) }
         }
+        reconcileTouches()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if gestureTouches.count == 2,
-           let a = gestureTouches.first, let b = gestureTouches.last,
-           touches.contains(a) || touches.contains(b) {
+        if gestureTouches.count == 2 {
             updateGesture()
             return
         }
-        guard let t = trackingTouch, touches.contains(t) else { return }
-        moveToolTouch(t)
+        if let t = trackingTouch, touches.contains(t) {
+            moveToolTouch(t)
+        }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        finishTouches(touches, cancelled: false)
+        endTouches(touches, cancelled: false)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        finishTouches(touches, cancelled: true)
+        endTouches(touches, cancelled: true)
     }
 
-    private func finishTouches(_ touches: Set<UITouch>, cancelled: Bool) {
+    private func endTouches(_ touches: Set<UITouch>, cancelled: Bool) {
         for t in touches {
-            gestureTouches.removeAll { $0 == t }
+            activeTouches.removeAll { $0 == t }
+            toolSuppressed.remove(t)
             if t == trackingTouch {
                 trackingTouch = nil
                 endToolTouch(t, cancelled: cancelled)
             }
         }
-        // If one finger remains after a gesture, let it become a tool touch.
-        if gestureTouches.count == 1, let remaining = gestureTouches.first {
+        gestureTouches.removeAll { touches.contains($0) }
+        reconcileTouches()
+    }
+
+    private func reconcileTouches() {
+        if activeTouches.count >= 2 {
+            if trackingTouch != nil { cancelToolTouch() }
+            let pair = Array(activeTouches.prefix(2))
+            if pair != gestureTouches {
+                gestureTouches = pair
+                toolSuppressed.formUnion(pair)
+                beginGesture()
+            }
+        } else {
             gestureTouches.removeAll()
-            trackingTouch = remaining
-            beginToolTouch(remaining)
+            if activeTouches.count == 1, trackingTouch == nil {
+                let t = activeTouches[0]
+                if !toolSuppressed.contains(t) {
+                    trackingTouch = t
+                    beginToolTouch(t)
+                }
+            }
+            if activeTouches.isEmpty { toolSuppressed.removeAll() }
         }
     }
 
@@ -372,7 +401,8 @@ final class MetalGameView: UIView {
         let b = gestureTouches[1].location(in: self)
         gestureStartDist = hypot(a.x - b.x, a.y - b.y)
         gestureStartScale = state.camera.scale
-        gestureLastMid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        gestureAnchorWorld = state.camera.screenToWorld(mid, viewport: bounds.size)
     }
 
     private func updateGesture() {
@@ -382,15 +412,16 @@ final class MetalGameView: UIView {
         let dist = hypot(a.x - b.x, a.y - b.y)
         let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
 
-        // Pinch zoom.
+        // Pinch zoom ANCHORED at the pinch point (2026-10-04: previously
+        // zoomed around the view center, so content slid away from fingers).
         state.camera.scale = gestureStartScale * Float(dist / gestureStartDist)
         state.camera.clampScale()
-
-        // Two-finger drag pans.
-        let dx = mid.x - gestureLastMid.x
-        let dy = mid.y - gestureLastMid.y
-        state.camera.center.x -= Float(dx) / state.camera.scale
-        state.camera.center.y += Float(dy) / state.camera.scale
-        gestureLastMid = mid
+        // Keep the world point from gesture start under the current midpoint;
+        // this handles both zoom-around-point and two-finger pan.
+        let w = gestureAnchorWorld
+        let vw = Float(bounds.size.width), vh = Float(bounds.size.height)
+        state.camera.center.x = w.x - (Float(mid.x) - vw * 0.5) / state.camera.scale
+        state.camera.center.y = w.y - (vh * 0.5 - Float(mid.y)) / state.camera.scale
+        state.camera.clampCenter()
     }
 }

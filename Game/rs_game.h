@@ -76,7 +76,11 @@ int  RS_GetParticles(RSWorld* w, RSParticle* out, int maxItems);
 void RS_SetParticleBudget(RSWorld* w, int max);   /* graphics setting */
 
 /* --- Lua modding --- */
-int  RS_RunLuaFile(RSWorld* w, const char* path); /* 0=ok, else error */
+int  RS_RunLuaFile(RSWorld* w, const char* path); /* 0=ok, else error.
+   Loads INTO the world's shared Lua state (created on demand) so multiple
+   mods coexist; each mod's rs.on_tick appends to the per-tick callback list. */
+void RS_LuaReset(RSWorld* w); /* drop the whole Lua state (all mods). Call
+   this, then RS_RunLuaFile per enabled mod, when the mod set changes. */
 const char* RS_GetLuaError(RSWorld* w);
 /* Lua API (documented in Scripting/LUA_API.md):
    rs.spawn_human(x,y) rs.spawn_crate(x,y,s) rs.spawn_barrel(x,y)
@@ -89,14 +93,13 @@ int   RS_GetEntityCount(RSWorld* w);
 int   RS_GetBodyCount(RSWorld* w);
 float RS_GetStepMs(RSWorld* w);   /* last step CPU ms, for settings HUD */
 
-/* --- App-required extensions ---
- * Needed by App/ tools & settings. Implemented by Game/ in the real build.
- * Until then, Game/STUB_game.cpp provides harmless defaults; delete the
- * stub when Game/ implements these for real. */
-uint32_t RS_EntityAtPoint(RSWorld* w, float x, float y); /* topmost entity
-    whose body contains the point; 0 = none. Used by Delete/Freeze/Heal. */
-void RS_SetPhysicsSubsteps(RSWorld* w, int n); /* 1..4, default 2. Backing for
-    the Settings > Graphics > Physics substeps control. */
+/* --- App-required extensions --- */
+uint32_t RS_EntityAtPoint(RSWorld* w, float x, float y); /* topmost (most
+    recently created) entity whose body contains the point; 0 = none.
+    Used by Delete/Freeze/Heal. */
+void RS_SetPhysicsSubsteps(RSWorld* w, int n); /* 1..4, default 2. Subdivides
+    each 1/60s tick into n physics substeps (and scales solver iterations).
+    Backing for the Settings > Graphics > Physics substeps control. */
 
 #ifdef __cplusplus
 }

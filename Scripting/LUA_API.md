@@ -68,10 +68,9 @@ rs.apply_impulse(bob, 0, 5000)  -- launch upward
 ```
 
 ### `rs.on_tick(fn) -> true`
-Registers `fn` to run every physics step. Re-registering replaces the
-previous callback. Errors are caught: the message is available in
-Settings → Mods and via `RS_GetLuaError`; a failing tick never crashes
-the game.
+Registers `fn` to run every physics step. Registering **appends**: every
+callback from every enabled mod runs each tick, in registration order. One
+mod's error is caught and reported without silencing the others.
 
 ```lua
 local t = 0
@@ -80,6 +79,12 @@ rs.on_tick(function()
   if t % 60 == 0 then print("a second passed") end
 end)
 ```
+
+## Multiple mods
+
+All enabled mods share one Lua state per world. Loading a mod never wipes
+the others. When the enabled set changes (Settings → Mods), the app calls
+`RS_LuaReset` (drops everything) and reloads each enabled mod fresh.
 
 ## The `print` function
 
@@ -90,15 +95,28 @@ end)
 
 Mods run in a restricted Lua environment:
 
-- `os.execute`, `os.exit`, `os.remove`, `os.rename` are **removed**.
-- `io` is **read-only**: `io.write`, `io.popen`, `io.output` removed;
+- `os.execute`, `os.exit`, `os.remove`, `os.rename`, `os.getenv`,
+  `os.tmpname` are **removed** (the last two leak host filesystem paths).
+- `io` is **read-only**: `io.write`, `io.popen`, `io.output`, `io.tmpfile`
+  removed; `io.stdin`/`io.stdout`/`io.stderr` handles removed;
   `io.open` rejects write/append modes.
-- `package.cpath` is emptied and the C module loaders are removed —
-  mods cannot load native code. Pure-Lua `require` still works.
+- `dofile` and `loadfile` are **removed** (arbitrary file reads).
+  `require` is locked to the mod's own directory (`package.path` is set
+  per mod file; `package.cpath` is empty).
+- `package.loadlib` is removed and the C module loaders are stripped —
+  mods cannot load native code.
 - The `debug` library is not loaded.
+- `print(...)` output is truncated at 4KB per call.
 
 `math`, `string`, `table`, `coroutine`, `utf8`, `os.clock`, `os.time`,
-`os.date`, `dofile`, `load`/`loadfile` are available.
+`os.date`, `load` are available.
+
+## Resource limits (denial-of-service protection)
+
+- **Time**: a mod file gets ~5 seconds to load; each tick's callbacks share
+  ~100ms. Overruns raise a catchable `mod timed out` error.
+- **Memory**: each world's Lua state is capped at 64MB. Exceeding it raises
+  a catchable `not enough memory` error; the state stays usable.
 
 ## Example: meteor shower
 

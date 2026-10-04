@@ -192,24 +192,64 @@ void test_heal_human() {
   RSWorld* w = RS_CreateWorld();
   uint32_t h = RS_SpawnHuman(w, 0, 100);
   CHECK(h != 0);
-  stepN(w, 30);
-  // Damage the human with explosions until dead.
-  for (int i = 0; i < 5; ++i) {
-    RS_Explode(w, 0, 100, 100, 500);
-    stepN(w, 10);
-  }
-  // Heal.
+  // Light wound BEFORE it falls: explosion offset so limbs are hurt
+  // (dmg = 160*fall) but not detached. Torso: d=120, r=200 -> dmg=64.
+  RS_Explode(w, 120, 100, 200, 100);
+  stepN(w, 10);
   RS_HealHuman(w, h);
-  // Should not crash; human marked not dead.
-  RSRenderItem items[32];
-  int n = RS_GetRenderItems(w, items, 32);
+  // Healed: human alive (tint 0 on limbs; particles are tint 2).
+  RSRenderItem items[64];
+  int n = RS_GetRenderItems(w, items, 64);
   bool foundAlive = false;
+  int limbCount = 0;
   for (int i = 0; i < n; ++i) {
-    if (items[i].tint == 0) foundAlive = true;
+    if (items[i].tint == 0) { foundAlive = true; ++limbCount; }
   }
   CHECK(foundAlive);
+  CHECK(limbCount == 11);  // all limbs alive, none detached
   RS_DestroyWorld(w);
   printf("test_heal_human ok\n");
+}
+
+// N6: heal must NOT resurrect detached limbs as zombies. After head+torso
+// are destroyed (human dead), heal leaves the corpse dead.
+void test_N6_heal_keeps_detached_dead() {
+  RSWorld* w = RS_CreateWorld();
+  uint32_t h = RS_SpawnHuman(w, 0, 100);
+  CHECK(h != 0);
+  // Destroy head+torso at spawn (torso is at ~(0,138)): radius 100 gives
+  // dmg=160 at center > 140 torso HP, and head (d=40) takes 96 > 60 HP.
+  // No steps between explode and heal: pure explosion damage, no fire spread.
+  RS_Explode(w, 0, 138, 100, 500);
+  RS_HealHuman(w, h);
+  // No zombie: the human stays dead (tint 1 on every limb). The old code
+  // resurrected it (tint 0). Particles are tint 2.
+  RSRenderItem items[64];
+  int n = RS_GetRenderItems(w, items, 64);
+  int deadLimbs = 0, aliveLimbs = 0;
+  for (int i = 0; i < n; ++i) {
+    if (items[i].tint == 1) ++deadLimbs;
+    else if (items[i].tint == 0) ++aliveLimbs;
+  }
+  CHECK(deadLimbs == 11);
+  CHECK(aliveLimbs == 0);
+  RS_DestroyWorld(w);
+  printf("test_N6_heal_keeps_detached_dead ok\n");
+}
+
+// N5: entity ids stay monotonic across RS_ClearWorld (no aliasing of
+// stale mod-held ids).
+void test_N5_ids_not_reused_after_clear() {
+  RSWorld* w = RS_CreateWorld();
+  uint32_t h1 = RS_SpawnHuman(w, 0, 100);
+  CHECK(h1 == 1);
+  RS_ClearWorld(w);
+  CHECK(RS_GetEntityCount(w) == 0);
+  uint32_t h2 = RS_SpawnHuman(w, 0, 100);
+  CHECK(h2 != 1);  // never reissued within the world's lifetime
+  CHECK(h2 == 2);  // monotonic
+  RS_DestroyWorld(w);
+  printf("test_N5_ids_not_reused_after_clear ok\n");
 }
 
 void test_ignite() {
@@ -307,6 +347,116 @@ void test_step_ms() {
   printf("test_step_ms ok\n");
 }
 
+// M1 regression: grab a barrel, explode it, spawn a ball (id may be reused),
+// move the stale grab — the ball must NOT get yanked.
+void test_grab_after_explode() {
+  RSWorld* w = RS_CreateWorld();
+  uint32_t barrel = RS_SpawnBarrel(w, 0, 50);
+  CHECK(barrel != 0);
+  // Grab the barrel. RS_EntityAtPoint finds it; grab at its location.
+  RSRenderItem items[16];
+  int n = RS_GetRenderItems(w, items, 16);
+  CHECK(n == 1);
+  float bx = items[0].x, by = items[0].y;
+  uint32_t grab = RS_GrabBegin(w, bx, by);
+  CHECK(grab != 0);
+  // Explode the barrel via damage (releases the grab).
+  RS_Explode(w, bx, by, 130.0f, 900.0f);
+  stepN(w, 5);
+  // Spawn a ball — may reuse the barrel's body id.
+  uint32_t ball = RS_SpawnBall(w, 300, 300, 15);
+  CHECK(ball != 0);
+  // Record ball position, then move the (now stale) grab far away.
+  n = RS_GetRenderItems(w, items, 16);
+  float sx = 0, sy = 0;
+  for (int i = 0; i < n; ++i) {
+    // find the ball: it's the only circle at ~(300,300)
+    if (items[i].shape == 1 && items[i].x > 200) { sx = items[i].x; sy = items[i].y; }
+  }
+  CHECK(sx > 200);  // ball found
+  RS_GrabMove(w, grab, 300, 900);  // stale grab target
+  stepN(w, 30);
+  // Ball should have fallen (gravity), not teleported toward (300,900).
+  n = RS_GetRenderItems(w, items, 16);
+  float ex = 0, ey = 0;
+  for (int i = 0; i < n; ++i) {
+    if (items[i].shape == 1 && items[i].x > 200) { ex = items[i].x; ey = items[i].y; }
+  }
+  CHECK(ey < sy);  // fell down, not yanked up toward 900
+  CHECK(fabsf(ex - sx) < 60.0f);  // didn't fly sideways
+  RS_GrabEnd(w, grab);
+  RS_DestroyWorld(w);
+  printf("test_grab_after_explode ok\n");
+}
+
+// M2 regression: 200 chained barrels must not crash (iterative queue).
+void test_mass_barrel_chain() {
+  RSWorld* w = RS_CreateWorld();
+  for (int i = 0; i < 200; ++i) {
+    // Line them up within chain-detonation radius (130).
+    uint32_t b = RS_SpawnBarrel(w, (float)(i * 60), 100.0f);
+    CHECK(b != 0);
+  }
+  CHECK(RS_GetEntityCount(w) == 200);
+  // Detonate the first; chains should propagate iteratively.
+  RS_Explode(w, 0, 100, 130.0f, 900.0f);
+  stepN(w, 120);
+  // All barrels should be gone (exploded), entities swept.
+  CHECK(RS_GetEntityCount(w) == 0);
+  RS_DestroyWorld(w);
+  printf("test_mass_barrel_chain ok\n");
+}
+
+// M3 regression: despawned entities are actually erased.
+void test_despawn_erases() {
+  RSWorld* w = RS_CreateWorld();
+  uint32_t ids[10];
+  for (int i = 0; i < 10; ++i) ids[i] = RS_SpawnCrate(w, (float)(i * 50), 100, 20);
+  CHECK(RS_GetEntityCount(w) == 10);
+  for (int i = 0; i < 5; ++i) RS_Despawn(w, ids[i]);
+  CHECK(RS_GetEntityCount(w) == 5);
+  // Despawned ids are gone.
+  RS_Despawn(w, ids[0]);  // double-despawn: no-op, no crash
+  CHECK(RS_GetEntityCount(w) == 5);
+  // Grabs are erased on RS_GrabEnd.
+  uint32_t g = RS_GrabBegin(w, 250, 100);
+  CHECK(g != 0);
+  RS_GrabEnd(w, g);
+  RS_GrabEnd(w, g);  // double-end: no-op, no crash
+  RS_DestroyWorld(w);
+  printf("test_despawn_erases ok\n");
+}
+
+// M4 regression: hard impacts on a human cause impact damage.
+// (No ground exists in the world; force overlap to generate contact impulse.)
+void test_impact_damage() {
+  RSWorld* w = RS_CreateWorld();
+  uint32_t h = RS_SpawnHuman(w, 0, 500);
+  CHECK(h != 0);
+  stepN(w, 30);  // let joints settle
+  // Get torso position.
+  RSRenderItem items[32];
+  int n = RS_GetRenderItems(w, items, 32);
+  CHECK(n == 11);
+  float hx = items[1].x, hy = items[1].y;  // torso
+  // Drop a crate directly onto the torso from above with speed:
+  // spawn overlapping, then slam it down via impulse.
+  uint32_t c = RS_SpawnCrate(w, hx, hy + 60, 40);
+  CHECK(c != 0);
+  RS_ApplyImpulse(w, c, 0, -8000.0f);  // slam down onto the human
+  stepN(w, 60);
+  // Human should have taken impact damage (blood particles spawned).
+  RSParticle parts[8192];
+  int np = RS_GetParticles(w, parts, 8192);
+  bool foundBlood = false;
+  for (int i = 0; i < np; ++i) {
+    if (parts[i].type == 0) { foundBlood = true; break; }
+  }
+  CHECK(foundBlood);  // impact damage produced blood
+  RS_DestroyWorld(w);
+  printf("test_impact_damage ok\n");
+}
+
 int main() {
   test_spawn_human();
   test_shoot_human();
@@ -321,6 +471,12 @@ int main() {
   test_melee();
   test_clear_world();
   test_step_ms();
+  test_grab_after_explode();
+  test_mass_barrel_chain();
+  test_despawn_erases();
+  test_impact_damage();
+  test_N5_ids_not_reused_after_clear();
+  test_N6_heal_keeps_detached_dead();
   if (failures == 0) {
     printf("ALL GAME TESTS PASSED\n");
     return 0;
