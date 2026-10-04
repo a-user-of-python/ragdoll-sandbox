@@ -1,0 +1,906 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+		59E9FD5F6CF199685A002D64 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/GameState.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		CA8F513BED4B6C021076900B = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/GameView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		365DB8006AD346E433054F6F = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/MetalGameView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		A1D5394107C5D9AFEB290EA3 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/ModManager.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		E315BA0D30023559AC811DC0 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/RagdollSandboxApp.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		AB57A07A7BC2202AA0D363AF = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/SettingsView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		A49159C26432F09C3CD47A1C = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/SpawnPaletteView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		B9508C9A566DDD3760F4FC70 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/SystemInfo.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		CB3F0A3C949AD9DEF035BFFA = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/ToolbarView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		FE11F991690BF81F2CEF2D94 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/TopBarView.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		E73EAF46E59A3A6666D86876 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = App/StikJIT/StikJIT.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		9A7F45769CB0622EB7555ADF = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.swift;
+			path = Renderer/Renderer.swift;
+			sourceTree = SOURCE_ROOT;
+		};
+		E608DE7638C345D02BD3D92E = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.metal;
+			path = Renderer/Shaders.metal;
+			sourceTree = SOURCE_ROOT;
+		};
+		186A35B218AB036422362738 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.cpp.cpp;
+			path = Game/rs_game.cpp;
+			sourceTree = SOURCE_ROOT;
+		};
+		6EBDCD70EAA20ABC9D5B09B5 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.cpp.cpp;
+			path = Engine/src/physics.cpp;
+			sourceTree = SOURCE_ROOT;
+		};
+		740328EB9C9D087991ADEBB2 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.cpp.cpp;
+			path = Scripting/lua_bindings.cpp;
+			sourceTree = SOURCE_ROOT;
+		};
+		A181B7B135DBA0496711A4B3 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lapi.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		3B37E325E97E7B1156CCA809 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lauxlib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		DA286765DA34802506C02592 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lbaselib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		CC4C3A2071B385FEF03023B8 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lcode.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		DD8127389279D324E51680EB = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lcorolib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		207229525018EEE457B0A177 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lctype.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		A06CC3E337D14D23E3B5A6BA = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ldblib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		A9B8EA9B7ABD247D50BD40F6 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ldebug.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		F5AFFD6D2DE2572D3D118D99 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ldo.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		43F18C05584BC651EFF3BF62 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ldump.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		88A9DC188FFE8672BE366CAD = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lfunc.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		CD2619559FE3E2869A9646FB = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lgc.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		7C6D11159127E263893F8841 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/linit.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		BE7F7FD5F9CEEC35C9742FFB = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/liolib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		006D66EF082F7830DA2F9162 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/llex.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		88648CA6C7972E18A235B23F = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lmathlib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		52C1AF1090E6BA5AD6F31679 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lmem.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		27F6242D10928EFB16B2F996 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/loadlib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		177B83BC0A0CE3A40EFA1E95 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lobject.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		E7393DFE7CFEF85531C9A5DB = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lopcodes.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		F5229F11DB7BFD8E995A3757 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/loslib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		98CB1FD6DD65961F50964979 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lparser.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		E616588063F0D468BCE43B61 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lstate.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		DEDFD6A64269258678AF4259 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lstring.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		7A5D9932C56BB6C6F6E1F020 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lstrlib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		69F5CCF6AD7DBFFC5F781C95 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ltable.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		E9089CA0AD18F1B87E6FD581 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ltablib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		C85FD5F2685F02454F54FC5B = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/ltm.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		C0998E378F2595D88FA33547 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lundump.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		F06F64337F920EC40DA07231 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lutf8lib.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		3E6609A7BD8BA362406FB31F = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lvm.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		9AE14072BE2CF1CED35BD27C = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.c;
+			path = ThirdParty/lua/src/lzio.c;
+			sourceTree = SOURCE_ROOT;
+		};
+		80011D2D4AE15D50452E650A = {
+			isa = PBXFileReference;
+			explicitFileType = text;
+			path = App/sample_mod.lua;
+			sourceTree = SOURCE_ROOT;
+		};
+		7DFE894780CB69A810E85AA7 = {
+			isa = PBXFileReference;
+			explicitFileType = text;
+			path = Scripting/sample_mods/meteor_shower.lua;
+			sourceTree = SOURCE_ROOT;
+		};
+		D35EC48B6F8BFCC8DF5C8E6B = {
+			isa = PBXFileReference;
+			explicitFileType = folder.assetcatalog;
+			path = App/Assets.xcassets;
+			sourceTree = SOURCE_ROOT;
+		};
+		A19BB4468A08E9BCB183460D = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.h;
+			path = App/RagdollSandbox-Bridging-Header.h;
+			sourceTree = SOURCE_ROOT;
+		};
+		92ED42B4C71E14C8BE40ED6F = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.h;
+			path = Game/rs_game.h;
+			sourceTree = SOURCE_ROOT;
+		};
+		366FFF1EEA3F7BD28A5DA46C = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.h;
+			path = Engine/include/rs2d/physics.h;
+			sourceTree = SOURCE_ROOT;
+		};
+		154181ABE8BADB3E130BD950 = {
+			isa = PBXFileReference;
+			explicitFileType = sourcecode.c.h;
+			path = Scripting/lua_bindings.h;
+			sourceTree = SOURCE_ROOT;
+		};
+		618C4CEA5071B5B9E92A4A80 = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = RagdollSandbox.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		8B93F62C2858F81E7AD43C83 = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = Metal.framework;
+			path = System/Library/Frameworks/Metal.framework;
+			sourceTree = SDKROOT;
+		};
+		2A1C917E0C0C0157D603F3F0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = MetalKit.framework;
+			path = System/Library/Frameworks/MetalKit.framework;
+			sourceTree = SDKROOT;
+		};
+		EF4E625944082524E4EC6CD4 = {
+			isa = PBXBuildFile;
+			fileRef = 59E9FD5F6CF199685A002D64;
+		};
+		4A8074FB8A811D6955F68DE8 = {
+			isa = PBXBuildFile;
+			fileRef = CA8F513BED4B6C021076900B;
+		};
+		952845387995E4CDDECB88BC = {
+			isa = PBXBuildFile;
+			fileRef = 365DB8006AD346E433054F6F;
+		};
+		29ABEAB80A8110A7F9CF74D5 = {
+			isa = PBXBuildFile;
+			fileRef = A1D5394107C5D9AFEB290EA3;
+		};
+		56E0E1C4AFE4AA7BBF8D3A78 = {
+			isa = PBXBuildFile;
+			fileRef = E315BA0D30023559AC811DC0;
+		};
+		932FFEB1C03E23FAF41C8863 = {
+			isa = PBXBuildFile;
+			fileRef = AB57A07A7BC2202AA0D363AF;
+		};
+		7CD84689CE91CD56B2225908 = {
+			isa = PBXBuildFile;
+			fileRef = A49159C26432F09C3CD47A1C;
+		};
+		0121B0F86025A2B2FD90213F = {
+			isa = PBXBuildFile;
+			fileRef = B9508C9A566DDD3760F4FC70;
+		};
+		F95E60F9A2CB455B84E8B347 = {
+			isa = PBXBuildFile;
+			fileRef = CB3F0A3C949AD9DEF035BFFA;
+		};
+		E0A5E51C71478CFD7EE8C091 = {
+			isa = PBXBuildFile;
+			fileRef = FE11F991690BF81F2CEF2D94;
+		};
+		5A072CD96C8C437466C4F2E9 = {
+			isa = PBXBuildFile;
+			fileRef = E73EAF46E59A3A6666D86876;
+		};
+		A7A1B77ABD06A99315D8A6FC = {
+			isa = PBXBuildFile;
+			fileRef = 9A7F45769CB0622EB7555ADF;
+		};
+		83DAED93E5BA19036620AF56 = {
+			isa = PBXBuildFile;
+			fileRef = E608DE7638C345D02BD3D92E;
+		};
+		C7927C2E693585E1340C1D9C = {
+			isa = PBXBuildFile;
+			fileRef = 186A35B218AB036422362738;
+		};
+		E340FAD8BD919AC04DF65A49 = {
+			isa = PBXBuildFile;
+			fileRef = 6EBDCD70EAA20ABC9D5B09B5;
+		};
+		055976DFF74D532675E9F2D3 = {
+			isa = PBXBuildFile;
+			fileRef = 740328EB9C9D087991ADEBB2;
+		};
+		99DD7281ACCCC817F9959101 = {
+			isa = PBXBuildFile;
+			fileRef = A181B7B135DBA0496711A4B3;
+		};
+		8ECFB24F0AC5181EA8AB0618 = {
+			isa = PBXBuildFile;
+			fileRef = 3B37E325E97E7B1156CCA809;
+		};
+		FCAD027A815BF996463D1788 = {
+			isa = PBXBuildFile;
+			fileRef = DA286765DA34802506C02592;
+		};
+		76E0FA27B19B9CC4463A341C = {
+			isa = PBXBuildFile;
+			fileRef = CC4C3A2071B385FEF03023B8;
+		};
+		0B544F544ECE9F47785D7007 = {
+			isa = PBXBuildFile;
+			fileRef = DD8127389279D324E51680EB;
+		};
+		A5787836A66F1EC6E843C0C4 = {
+			isa = PBXBuildFile;
+			fileRef = 207229525018EEE457B0A177;
+		};
+		69CFB5B66FCDB9839513F115 = {
+			isa = PBXBuildFile;
+			fileRef = A06CC3E337D14D23E3B5A6BA;
+		};
+		378B5064A9AB15C4EA809CC4 = {
+			isa = PBXBuildFile;
+			fileRef = A9B8EA9B7ABD247D50BD40F6;
+		};
+		D85B9F7C223FED2898A96BA9 = {
+			isa = PBXBuildFile;
+			fileRef = F5AFFD6D2DE2572D3D118D99;
+		};
+		96DAD85FF1E234DB8F731FE2 = {
+			isa = PBXBuildFile;
+			fileRef = 43F18C05584BC651EFF3BF62;
+		};
+		5F16D57EA48CFACD21D5EC9F = {
+			isa = PBXBuildFile;
+			fileRef = 88A9DC188FFE8672BE366CAD;
+		};
+		DF36FD9F0739000D85904593 = {
+			isa = PBXBuildFile;
+			fileRef = CD2619559FE3E2869A9646FB;
+		};
+		368E6D4CBF77F796825BCBA5 = {
+			isa = PBXBuildFile;
+			fileRef = 7C6D11159127E263893F8841;
+		};
+		DA78D443C60802CC6237C60F = {
+			isa = PBXBuildFile;
+			fileRef = BE7F7FD5F9CEEC35C9742FFB;
+		};
+		C91A185506DDCE9FC84C37A7 = {
+			isa = PBXBuildFile;
+			fileRef = 006D66EF082F7830DA2F9162;
+		};
+		DC9BA6029FBA6621BB37543A = {
+			isa = PBXBuildFile;
+			fileRef = 88648CA6C7972E18A235B23F;
+		};
+		24BC9232B4B9D5B9AFB5E3FA = {
+			isa = PBXBuildFile;
+			fileRef = 52C1AF1090E6BA5AD6F31679;
+		};
+		96A6717D168DF1A4A9F581CE = {
+			isa = PBXBuildFile;
+			fileRef = 27F6242D10928EFB16B2F996;
+		};
+		1021EE3AE60355294ECA7FEE = {
+			isa = PBXBuildFile;
+			fileRef = 177B83BC0A0CE3A40EFA1E95;
+		};
+		404338B5AE4535201A747077 = {
+			isa = PBXBuildFile;
+			fileRef = E7393DFE7CFEF85531C9A5DB;
+		};
+		5A0788AEF5A9E0013D137651 = {
+			isa = PBXBuildFile;
+			fileRef = F5229F11DB7BFD8E995A3757;
+		};
+		245A5118E8B88A07FD9272EE = {
+			isa = PBXBuildFile;
+			fileRef = 98CB1FD6DD65961F50964979;
+		};
+		8A449D4EB2274F1DC7CC6706 = {
+			isa = PBXBuildFile;
+			fileRef = E616588063F0D468BCE43B61;
+		};
+		1471F9BBE2A5CF74C78E3CB5 = {
+			isa = PBXBuildFile;
+			fileRef = DEDFD6A64269258678AF4259;
+		};
+		B56005F00D83782326CACE0F = {
+			isa = PBXBuildFile;
+			fileRef = 7A5D9932C56BB6C6F6E1F020;
+		};
+		C70DF0E9C269BE17909B55AB = {
+			isa = PBXBuildFile;
+			fileRef = 69F5CCF6AD7DBFFC5F781C95;
+		};
+		1ADB9606AA070314B8D2D435 = {
+			isa = PBXBuildFile;
+			fileRef = E9089CA0AD18F1B87E6FD581;
+		};
+		4ABDADDE0904AB88B6FDFFD2 = {
+			isa = PBXBuildFile;
+			fileRef = C85FD5F2685F02454F54FC5B;
+		};
+		673A2C371DBDA9D224D7BBF2 = {
+			isa = PBXBuildFile;
+			fileRef = C0998E378F2595D88FA33547;
+		};
+		EF92A7854670E9A2E051590C = {
+			isa = PBXBuildFile;
+			fileRef = F06F64337F920EC40DA07231;
+		};
+		ADFB4ED703988992F13ECF58 = {
+			isa = PBXBuildFile;
+			fileRef = 3E6609A7BD8BA362406FB31F;
+		};
+		AC529B83ECAED4B1FCB139D0 = {
+			isa = PBXBuildFile;
+			fileRef = 9AE14072BE2CF1CED35BD27C;
+		};
+		B983A6C211C68E4D97B01793 = {
+			isa = PBXBuildFile;
+			fileRef = 80011D2D4AE15D50452E650A;
+		};
+		4E9DC09311BB855D2014DC3D = {
+			isa = PBXBuildFile;
+			fileRef = 7DFE894780CB69A810E85AA7;
+		};
+		543E8408D996E7ED378179E0 = {
+			isa = PBXBuildFile;
+			fileRef = D35EC48B6F8BFCC8DF5C8E6B;
+		};
+		646AF78E3CC6261ABAA0787D = {
+			isa = PBXBuildFile;
+			fileRef = 8B93F62C2858F81E7AD43C83;
+		};
+		502AF10534CC960DD299BE0A = {
+			isa = PBXBuildFile;
+			fileRef = 2A1C917E0C0C0157D603F3F0;
+		};
+		7A70D71C385290AF96BF1031 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EF4E625944082524E4EC6CD4,
+				4A8074FB8A811D6955F68DE8,
+				952845387995E4CDDECB88BC,
+				29ABEAB80A8110A7F9CF74D5,
+				56E0E1C4AFE4AA7BBF8D3A78,
+				932FFEB1C03E23FAF41C8863,
+				7CD84689CE91CD56B2225908,
+				0121B0F86025A2B2FD90213F,
+				F95E60F9A2CB455B84E8B347,
+				E0A5E51C71478CFD7EE8C091,
+				5A072CD96C8C437466C4F2E9,
+				A7A1B77ABD06A99315D8A6FC,
+				83DAED93E5BA19036620AF56,
+				C7927C2E693585E1340C1D9C,
+				E340FAD8BD919AC04DF65A49,
+				055976DFF74D532675E9F2D3,
+				99DD7281ACCCC817F9959101,
+				8ECFB24F0AC5181EA8AB0618,
+				FCAD027A815BF996463D1788,
+				76E0FA27B19B9CC4463A341C,
+				0B544F544ECE9F47785D7007,
+				A5787836A66F1EC6E843C0C4,
+				69CFB5B66FCDB9839513F115,
+				378B5064A9AB15C4EA809CC4,
+				D85B9F7C223FED2898A96BA9,
+				96DAD85FF1E234DB8F731FE2,
+				5F16D57EA48CFACD21D5EC9F,
+				DF36FD9F0739000D85904593,
+				368E6D4CBF77F796825BCBA5,
+				DA78D443C60802CC6237C60F,
+				C91A185506DDCE9FC84C37A7,
+				DC9BA6029FBA6621BB37543A,
+				24BC9232B4B9D5B9AFB5E3FA,
+				96A6717D168DF1A4A9F581CE,
+				1021EE3AE60355294ECA7FEE,
+				404338B5AE4535201A747077,
+				5A0788AEF5A9E0013D137651,
+				245A5118E8B88A07FD9272EE,
+				8A449D4EB2274F1DC7CC6706,
+				1471F9BBE2A5CF74C78E3CB5,
+				B56005F00D83782326CACE0F,
+				C70DF0E9C269BE17909B55AB,
+				1ADB9606AA070314B8D2D435,
+				4ABDADDE0904AB88B6FDFFD2,
+				673A2C371DBDA9D224D7BBF2,
+				EF92A7854670E9A2E051590C,
+				ADFB4ED703988992F13ECF58,
+				AC529B83ECAED4B1FCB139D0,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		424153ED3CD079DB4DB459AF = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				646AF78E3CC6261ABAA0787D,
+				502AF10534CC960DD299BE0A,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		285BB1C1430063331E9F5DD0 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B983A6C211C68E4D97B01793,
+				4E9DC09311BB855D2014DC3D,
+				543E8408D996E7ED378179E0,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1D0524B025E57AFFF263442 = {
+			isa = PBXGroup;
+			children = (
+				59E9FD5F6CF199685A002D64,
+				CA8F513BED4B6C021076900B,
+				365DB8006AD346E433054F6F,
+				A1D5394107C5D9AFEB290EA3,
+				E315BA0D30023559AC811DC0,
+				AB57A07A7BC2202AA0D363AF,
+				A49159C26432F09C3CD47A1C,
+				B9508C9A566DDD3760F4FC70,
+				CB3F0A3C949AD9DEF035BFFA,
+				FE11F991690BF81F2CEF2D94,
+				E73EAF46E59A3A6666D86876,
+				80011D2D4AE15D50452E650A,
+				D35EC48B6F8BFCC8DF5C8E6B,
+				A19BB4468A08E9BCB183460D,
+			);
+			name = App;
+			path = App;
+			sourceTree = "<group>";
+		};
+		487F588B8EC5362C3E992547 = {
+			isa = PBXGroup;
+			children = (
+				9A7F45769CB0622EB7555ADF,
+				E608DE7638C345D02BD3D92E,
+			);
+			name = Renderer;
+			path = Renderer;
+			sourceTree = "<group>";
+		};
+		348F96D797C63164F6588C42 = {
+			isa = PBXGroup;
+			children = (
+				186A35B218AB036422362738,
+				92ED42B4C71E14C8BE40ED6F,
+			);
+			name = Game;
+			path = Game;
+			sourceTree = "<group>";
+		};
+		D9EE146D61DB24F0808A7F5E = {
+			isa = PBXGroup;
+			children = (
+				6EBDCD70EAA20ABC9D5B09B5,
+				366FFF1EEA3F7BD28A5DA46C,
+			);
+			name = Engine;
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		A39C360037DE81A0B64482A4 = {
+			isa = PBXGroup;
+			children = (
+				740328EB9C9D087991ADEBB2,
+				7DFE894780CB69A810E85AA7,
+				154181ABE8BADB3E130BD950,
+			);
+			name = Scripting;
+			path = Scripting;
+			sourceTree = "<group>";
+		};
+		E2F3DB09327825BC9854F0D3 = {
+			isa = PBXGroup;
+			children = (
+				A181B7B135DBA0496711A4B3,
+				3B37E325E97E7B1156CCA809,
+				DA286765DA34802506C02592,
+				CC4C3A2071B385FEF03023B8,
+				DD8127389279D324E51680EB,
+				207229525018EEE457B0A177,
+				A06CC3E337D14D23E3B5A6BA,
+				A9B8EA9B7ABD247D50BD40F6,
+				F5AFFD6D2DE2572D3D118D99,
+				43F18C05584BC651EFF3BF62,
+				88A9DC188FFE8672BE366CAD,
+				CD2619559FE3E2869A9646FB,
+				7C6D11159127E263893F8841,
+				BE7F7FD5F9CEEC35C9742FFB,
+				006D66EF082F7830DA2F9162,
+				88648CA6C7972E18A235B23F,
+				52C1AF1090E6BA5AD6F31679,
+				27F6242D10928EFB16B2F996,
+				177B83BC0A0CE3A40EFA1E95,
+				E7393DFE7CFEF85531C9A5DB,
+				F5229F11DB7BFD8E995A3757,
+				98CB1FD6DD65961F50964979,
+				E616588063F0D468BCE43B61,
+				DEDFD6A64269258678AF4259,
+				7A5D9932C56BB6C6F6E1F020,
+				69F5CCF6AD7DBFFC5F781C95,
+				E9089CA0AD18F1B87E6FD581,
+				C85FD5F2685F02454F54FC5B,
+				C0998E378F2595D88FA33547,
+				F06F64337F920EC40DA07231,
+				3E6609A7BD8BA362406FB31F,
+				9AE14072BE2CF1CED35BD27C,
+			);
+			name = ThirdParty;
+			path = ThirdParty;
+			sourceTree = "<group>";
+		};
+		2F3A6B1E78F896718625FF06 = {
+			isa = PBXGroup;
+			children = (
+				618C4CEA5071B5B9E92A4A80,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		518DA81DB9B99529C0C0AEBE = {
+			isa = PBXGroup;
+			children = (
+				D1D0524B025E57AFFF263442,
+				487F588B8EC5362C3E992547,
+				348F96D797C63164F6588C42,
+				D9EE146D61DB24F0808A7F5E,
+				A39C360037DE81A0B64482A4,
+				E2F3DB09327825BC9854F0D3,
+				2F3A6B1E78F896718625FF06,
+			);
+			name = RagdollSandbox;
+			sourceTree = "<group>";
+		};
+		4301A0ED604AEEAA2B78FE8A = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F2F62AAE534BA46EC59716F3;
+			buildPhases = (
+				7A70D71C385290AF96BF1031,
+				424153ED3CD079DB4DB459AF,
+				285BB1C1430063331E9F5DD0,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RagdollSandbox;
+			productName = RagdollSandbox;
+			productReference = 618C4CEA5071B5B9E92A4A80;
+			productType = "com.apple.product-type.application";
+		};
+		969595A508627F35A110362C = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_BITCODE = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "2";
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		4C95F91A6D5CD87BB5DB8FDD = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_BITCODE = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "2";
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		7EF2517A8FE63F4681EC5EEA = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				969595A508627F35A110362C,
+				4C95F91A6D5CD87BB5DB8FDD,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A3FD2624D90AA76C1E18FB70 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "App/RagdollSandbox.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Game $(SRCROOT)/ThirdParty/lua/src $(SRCROOT)/Scripting";
+				INFOPLIST_FILE = "App/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ragdollsandbox.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "App/RagdollSandbox-Bridging-Header.h";
+			};
+			name = Debug;
+		};
+		CB4CAEBFF1A865FD02635BC0 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "App/RagdollSandbox.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Game $(SRCROOT)/ThirdParty/lua/src $(SRCROOT)/Scripting";
+				INFOPLIST_FILE = "App/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ragdollsandbox.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "App/RagdollSandbox-Bridging-Header.h";
+			};
+			name = Release;
+		};
+		F2F62AAE534BA46EC59716F3 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3FD2624D90AA76C1E18FB70,
+				CB4CAEBFF1A865FD02635BC0,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		46F86FAA6BBF9AC94A7E4595 = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 7EF2517A8FE63F4681EC5EEA;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 518DA81DB9B99529C0C0AEBE;
+			productRefGroup = 2F3A6B1E78F896718625FF06;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4301A0ED604AEEAA2B78FE8A,
+			);
+		};
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595;
+}
