@@ -22,3 +22,5 @@ Actions (sideload with Sideloadly/AltStore).
 - `.github/workflows/` — unsigned IPA build + host tests
 
 See `DESIGN.md` for the architecture contract.
+
+> Built with Muse — AI-assisted development.
